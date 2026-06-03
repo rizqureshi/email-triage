@@ -95,12 +95,23 @@ def _triage_with_openai(email: EmailMessage, settings: Settings) -> TriageResult
         text={"format": {"type": "json_object"}},
     )
 
-    data = json.loads(response.output_text)
+    output_text = getattr(response, "output_text", None)
+    if not isinstance(output_text, str) or not output_text.strip():
+        return _triage_with_rules(email, settings)
+
+    try:
+        data = json.loads(output_text)
+    except json.JSONDecodeError:
+        return _triage_with_rules(email, settings)
+
+    if not isinstance(data, dict) or not _has_usable_openai_values(data):
+        return _triage_with_rules(email, settings)
+
     return TriageResult(
         priority=_coerce_priority(data.get("priority")),
         category=_coerce_category(data.get("category")),
         summary=str(data.get("summary", "")).strip() or "No summary provided.",
-        action_required=bool(data.get("action_required")),
+        action_required=_coerce_bool(data.get("action_required")),
         reply_draft=str(data.get("reply_draft", "")).strip()
         or _default_reply_draft(email, settings),
     )
@@ -192,6 +203,64 @@ def _coerce_category(value: object) -> Category:
     if isinstance(value, str) and value.lower() in allowed:
         return value.lower()  # type: ignore[return-value]
     return "other"
+
+
+def _coerce_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value != 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "yes", "1"}:
+            return True
+        if normalized in {"false", "no", "0"}:
+            return False
+    return False
+
+
+def _has_usable_openai_values(data: dict[str, object]) -> bool:
+    priority = data.get("priority")
+    category = data.get("category")
+    summary = data.get("summary")
+    reply_draft = data.get("reply_draft")
+    action_required = data.get("action_required")
+
+    return any(
+        (
+            _is_valid_priority(priority),
+            _is_valid_category(category),
+            isinstance(summary, str) and bool(summary.strip()),
+            isinstance(reply_draft, str) and bool(reply_draft.strip()),
+            _is_bool_like(action_required),
+        )
+    )
+
+
+def _is_valid_priority(value: object) -> bool:
+    return isinstance(value, str) and value.lower() in {"low", "normal", "high", "urgent"}
+
+
+def _is_valid_category(value: object) -> bool:
+    return isinstance(value, str) and value.lower() in {
+        "billing",
+        "scheduling",
+        "support",
+        "sales",
+        "personal",
+        "newsletter",
+        "other",
+    }
+
+
+def _is_bool_like(value: object) -> bool:
+    if isinstance(value, bool):
+        return True
+    if isinstance(value, int):
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "false", "yes", "no", "1", "0"}
+    return False
 
 
 def _parse_args() -> argparse.Namespace:

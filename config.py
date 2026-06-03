@@ -40,6 +40,13 @@ def _get_int(name: str, default: int) -> int:
         raise ValueError(f"{name} must be an integer") from exc
 
 
+def _get_bounded_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    value = _get_int(name, default)
+    if value < minimum or value > maximum:
+        raise ValueError(f"{name} must be between {minimum} and {maximum}")
+    return value
+
+
 def load_settings() -> Settings:
     """Load settings from environment variables and .env."""
 
@@ -51,5 +58,5 @@ def load_settings() -> Settings:
         openai_api_key=api_key,
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
         default_reply_tone=os.getenv("DEFAULT_REPLY_TONE", "professional"),
-        max_draft_words=_get_int("MAX_DRAFT_WORDS", 180),
+        max_draft_words=_get_bounded_int("MAX_DRAFT_WORDS", 180, 20, 500),
     )
