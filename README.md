@@ -4,6 +4,8 @@ AI-assisted email triage and reply drafting for local review.
 
 This project is intentionally draft-only. It does not send emails automatically,
 connect to SMTP, or call any provider's send endpoint.
+Inbox ingestion is read-only: it fetches unread messages, analyzes them, and
+prints summary cards without changing mailbox state.
 
 ## What It Does
 
@@ -30,6 +32,9 @@ OPENAI_API_KEY=your_key_here
 
 If no API key is present, `triage.py` still runs using deterministic local
 rules.
+
+For read-only IMAP inbox ingestion, add your mailbox credentials to `.env`
+using the values in `.env.example`.
 
 ## Usage
 
@@ -69,6 +74,23 @@ The analyzer returns JSON with:
 - `action_items`
 - `suggested_reply`
 - `safety_note`
+
+### Read-Only Inbox Ingestion
+
+To fetch unread inbox messages and print summary cards:
+
+```bash
+python fetch_imap.py
+```
+
+You can override the mailbox or fetch limit for one run:
+
+```bash
+python fetch_imap.py --mailbox INBOX --max-messages 5
+```
+
+This command is read-only. It uses `readonly=True` mailbox selection, fetches
+unread messages, and does not delete, move, archive, or mark anything as read.
 
 ## Files
 

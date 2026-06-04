@@ -29,6 +29,18 @@ class Settings:
         return bool(self.openai_api_key)
 
 
+@dataclass(frozen=True)
+class ImapSettings:
+    """Environment-driven IMAP settings for read-only inbox ingestion."""
+
+    host: str
+    port: int
+    username: str
+    password: str
+    mailbox: str
+    max_messages: int
+
+
 def _get_int(name: str, default: int) -> int:
     raw_value = os.getenv(name)
     if raw_value is None or raw_value.strip() == "":
@@ -47,6 +59,13 @@ def _get_bounded_int(name: str, default: int, minimum: int, maximum: int) -> int
     return value
 
 
+def _required_env(name: str) -> str:
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        raise ValueError(f"{name} is required")
+    return value.strip()
+
+
 def load_settings() -> Settings:
     """Load settings from environment variables and .env."""
 
@@ -59,4 +78,17 @@ def load_settings() -> Settings:
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
         default_reply_tone=os.getenv("DEFAULT_REPLY_TONE", "professional"),
         max_draft_words=_get_bounded_int("MAX_DRAFT_WORDS", 180, 20, 500),
+    )
+
+
+def load_imap_settings() -> ImapSettings:
+    """Load read-only IMAP settings for fetch_imap.py."""
+
+    return ImapSettings(
+        host=_required_env("IMAP_HOST"),
+        port=_get_bounded_int("IMAP_PORT", 993, 1, 65535),
+        username=_required_env("IMAP_USERNAME"),
+        password=_required_env("IMAP_PASSWORD"),
+        mailbox=os.getenv("IMAP_MAILBOX", "INBOX").strip() or "INBOX",
+        max_messages=_get_bounded_int("IMAP_MAX_MESSAGES", 5, 1, 50),
     )
