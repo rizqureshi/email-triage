@@ -55,7 +55,7 @@ def _analyze_with_openai(email: EmailMessage, settings: Settings) -> EmailAnalys
                         "Priority must be low, normal, high, or urgent. Category must "
                         "be billing, scheduling, support, sales, personal, newsletter, "
                         "or other. action_items must be a JSON array of objects with "
-                        "a text field."
+                        "text, owner, due_date, and priority fields."
                     ),
                 },
                 {
@@ -219,7 +219,9 @@ def _extract_action_items(
 
         item_text = _normalize_action_item_text(match.group(1))
         if item_text:
-            action_items.append(ActionItem(text=item_text))
+            action_items.append(
+                ActionItem(text=item_text, owner="me", due_date=None, priority="normal")
+            )
             break
 
     if action_items:
@@ -227,7 +229,14 @@ def _extract_action_items(
 
     if "?" in text:
         subject = email.subject.strip() or "this email"
-        action_items.append(ActionItem(text=f"Respond to the question in '{subject}'."))
+        action_items.append(
+            ActionItem(
+                text=f"Respond to the question in '{subject}'.",
+                owner="me",
+                due_date=None,
+                priority="normal",
+            )
+        )
 
     return action_items
 
@@ -299,12 +308,39 @@ def _coerce_action_items(value: object, fallback: list[ActionItem]) -> list[Acti
                 items.append(ActionItem(text=normalized))
             continue
         if isinstance(item, dict):
-            text = _coerce_text(item.get("text"))
-            normalized = _normalize_action_item_text(text)
-            if normalized:
-                items.append(ActionItem(text=normalized))
+            action_item = _coerce_action_item(item)
+            if action_item is not None:
+                items.append(action_item)
 
     return items or fallback
+
+
+def _coerce_action_item(value: dict[str, object]) -> ActionItem | None:
+    text = _coerce_text(value.get("text"))
+    normalized = _normalize_action_item_text(text)
+    if not normalized:
+        return None
+
+    return ActionItem(
+        text=normalized,
+        owner=_coerce_action_item_owner(value.get("owner")),
+        due_date=_coerce_action_item_due_date(value.get("due_date")),
+        priority=_coerce_action_item_priority(value.get("priority")),
+    )
+
+
+def _coerce_action_item_owner(value: object) -> str:
+    owner = _coerce_text(value)
+    return owner or "me"
+
+
+def _coerce_action_item_due_date(value: object) -> str | None:
+    due_date = _coerce_text(value)
+    return due_date or None
+
+
+def _coerce_action_item_priority(value: object) -> Priority:
+    return _coerce_priority(value, "normal")
 
 
 def _coerce_text(value: object) -> str:

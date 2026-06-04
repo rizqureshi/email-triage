@@ -46,6 +46,9 @@ def test_action_item_extraction_for_confirmation_request() -> None:
     assert [item.text for item in result.action_items] == [
         "Invoice 1042 has been paid."
     ]
+    assert [item.owner for item in result.action_items] == ["me"]
+    assert [item.due_date for item in result.action_items] == [None]
+    assert [item.priority for item in result.action_items] == ["normal"]
     assert result.requires_response is True
 
 
@@ -114,3 +117,57 @@ def test_invalid_or_missing_model_output_falls_back_safely(
     assert result.requires_response is True
     assert result.action_items
     assert result.safety_note == "Draft only. No email was sent."
+
+
+def test_model_action_items_parse_new_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponse:
+        output_text = """
+        {
+          "summary": "Follow up is needed.",
+          "sender_intent": "Requesting confirmation.",
+          "priority": "high",
+          "category": "billing",
+          "requires_response": true,
+          "action_items": [
+            {
+              "text": "Confirm payment status",
+              "owner": "finance",
+              "due_date": "2026-06-05",
+              "priority": "urgent"
+            },
+            {
+              "text": "Send follow-up",
+              "owner": "",
+              "due_date": "",
+              "priority": "maybe"
+            }
+          ],
+          "suggested_reply": "Thanks for the note.",
+          "safety_note": "Draft only. No email was sent."
+        }
+        """
+
+    class FakeResponses:
+        def create(self, **_: object) -> FakeResponse:
+            return FakeResponse()
+
+    class FakeClient:
+        responses = FakeResponses()
+
+    monkeypatch.setattr(analyzer, "_create_openai_client", Mock(return_value=FakeClient()))
+
+    email = EmailMessage(
+        sender="alex@example.com",
+        subject="Invoice question",
+        body="Can you confirm whether invoice 1042 has been paid?",
+    )
+
+    result = analyzer.analyze_email(email, make_settings(api_key="sk-test"))
+
+    assert [item.text for item in result.action_items] == [
+        "Confirm payment status.",
+        "Send follow-up.",
+    ]
+    assert [item.owner for item in result.action_items] == ["finance", "me"]
+    assert [item.due_date for item in result.action_items] == ["2026-06-05", None]
+    assert [item.priority for item in result.action_items] == ["urgent", "normal"]

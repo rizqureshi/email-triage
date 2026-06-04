@@ -21,6 +21,9 @@ Category = Literal[
 @dataclass(frozen=True)
 class ActionItem:
     text: str
+    owner: str = "me"
+    due_date: str | None = None
+    priority: Priority = "normal"
 
 
 @dataclass(frozen=True)
