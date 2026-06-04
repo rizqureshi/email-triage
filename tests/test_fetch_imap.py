@@ -203,6 +203,22 @@ def test_fetch_unread_emails_uses_readonly_peek_and_recent_ids(
     assert [email.subject for _, email in emails] == ["Second", "Third"]
 
 
+def test_fetch_unread_emails_authentication_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = Mock()
+    client.login.side_effect = fetch_imap.imaplib.IMAP4.error("AUTH failed")
+    monkeypatch.setattr(fetch_imap.imaplib, "IMAP4_SSL", Mock(return_value=client))
+    monkeypatch.setattr(fetch_imap.ssl, "create_default_context", Mock(return_value=object()))
+
+    with pytest.raises(RuntimeError, match="IMAP authentication failed"):
+        fetch_imap.fetch_unread_emails(make_settings())
+
+    client.select.assert_not_called()
+    client.search.assert_not_called()
+    client.logout.assert_called_once()
+
+
 def test_fetch_inbox_summary_cards_printable_results(monkeypatch: pytest.MonkeyPatch) -> None:
     email = EmailMessage(
         sender="alex@example.com",

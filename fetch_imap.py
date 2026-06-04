@@ -18,6 +18,7 @@ from html.parser import HTMLParser
 from analyzer import analyze_email
 from config import ImapSettings, load_imap_settings
 from schemas import EmailAnalysis
+import storage
 from triage import EmailMessage
 
 
@@ -28,7 +29,14 @@ def fetch_unread_emails(settings: ImapSettings) -> list[tuple[str, EmailMessage]
     client = imaplib.IMAP4_SSL(settings.host, settings.port, ssl_context=ssl.create_default_context())
 
     try:
-        client.login(settings.username, settings.password)
+        try:
+            client.login(settings.username, settings.password)
+        except imaplib.IMAP4.error as exc:
+            raise RuntimeError(
+                "IMAP authentication failed. For iCloud Mail, use your full iCloud email "
+                "address as IMAP_USERNAME and an Apple app-specific password as IMAP_PASSWORD. "
+                "Do not use your normal Apple Account password."
+            ) from exc
         _ensure_ok(client.select(settings.mailbox, readonly=True), "select mailbox")
         search_status, search_data = client.search(None, "UNSEEN")
         _ensure_ok((search_status, search_data), "search unread messages")
@@ -258,6 +266,11 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="Override IMAP_MAILBOX for this run.",
     )
+    parser.add_argument(
+        "--save",
+        action="store_true",
+        help="Save summary cards to the local SQLite database.",
+    )
     return parser.parse_args()
 
 
@@ -281,7 +294,12 @@ def main() -> int:
     if args.mailbox is not None:
         settings = replace(settings, mailbox=args.mailbox)
 
-    print(json.dumps(fetch_inbox_summary_cards(settings), indent=2))
+    cards = fetch_inbox_summary_cards(settings)
+    if args.save:
+        storage.init_db()
+        storage.save_summary_cards(cards)
+
+    print(json.dumps(cards, indent=2))
     return 0
 
 

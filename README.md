@@ -92,12 +92,22 @@ python fetch_imap.py --mailbox INBOX --max-messages 5
 This command is read-only. It uses `readonly=True` mailbox selection, fetches
 unread messages, and does not delete, move, archive, or mark anything as read.
 
+To persist summary cards locally in `email_triage.db` while still printing the
+JSON output:
+
+```bash
+python fetch_imap.py --max-messages 5 --save
+```
+
+Set `EMAIL_TRIAGE_DB_PATH` if you want the database file somewhere else.
+
 ## Files
 
 - `config.py` loads environment-based settings.
 - `triage.py` contains the email model, triage logic, and CLI.
 - `analyzer.py` contains the read-only email intelligence CLI.
 - `schemas.py` defines the shared analysis dataclasses.
+- `storage.py` persists summary cards to local SQLite.
 - `.env.example` documents supported environment variables.
 - `requirements.txt` lists runtime dependencies.
 
