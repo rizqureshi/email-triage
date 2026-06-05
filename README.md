@@ -101,11 +101,21 @@ python fetch_imap.py --max-messages 5 --save
 
 Set `EMAIL_TRIAGE_DB_PATH` if you want the database file somewhere else.
 
+To generate a daily briefing from stored summary cards:
+
+```bash
+python daily_briefing.py --limit 20
+```
+
+This command reads from SQLite only. It does not fetch mail from IMAP or modify
+the mailbox.
+
 ## Files
 
 - `config.py` loads environment-based settings.
 - `triage.py` contains the email model, triage logic, and CLI.
 - `analyzer.py` contains the read-only email intelligence CLI.
+- `daily_briefing.py` generates the daily briefing from stored summary cards.
 - `schemas.py` defines the shared analysis dataclasses.
 - `storage.py` persists summary cards to local SQLite.
 - `.env.example` documents supported environment variables.
