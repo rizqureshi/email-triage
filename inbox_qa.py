@@ -128,10 +128,15 @@ def _score_card(card: dict[str, object], *, intent: str, terms: list[str]) -> in
         return 1
     if intent == "response" and card.get("requires_response"):
         score += 6
-    if intent == "urgent" and priority == "urgent":
-        score += 6
-    elif intent == "high_priority" and priority in {"urgent", "high"}:
-        score += 5
+    if intent == "urgent":
+        if priority != "urgent":
+            return 0
+        score += 100
+    elif intent == "high_priority":
+        if priority == "urgent":
+            score += 100
+        elif priority == "high":
+            score += 90
     if intent == "action_items" and card.get("action_items"):
         score += 4
 
@@ -252,6 +257,8 @@ def _detect_intent(question: str) -> str:
         return "catch_up"
     if _asks_for_response(question):
         return "response"
+    if _asks_for_urgent(question):
+        return "urgent"
     if _asks_for_priority(question):
         return "high_priority"
     if _asks_for_action_items(question):
@@ -281,12 +288,15 @@ def _asks_for_priority(question: str) -> bool:
     return any(
         phrase in question
         for phrase in (
-            "urgent",
             "high priority",
             "priority",
             "important emails",
         )
     )
+
+
+def _asks_for_urgent(question: str) -> bool:
+    return "urgent" in question
 
 
 def _asks_for_action_items(question: str) -> bool:

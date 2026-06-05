@@ -142,8 +142,16 @@ def test_urgent_email_query(tmp_path: Path) -> None:
 
     matches = inbox_qa.search_cards("What urgent emails do I have?", db_path=str(db_path))
 
-    assert [match["priority"] for match in matches] == ["urgent", "high"]
+    assert [match["priority"] for match in matches] == ["urgent"]
     assert matches[0]["subject"] == "Urgent issue"
+
+
+def test_high_priority_email_query(tmp_path: Path) -> None:
+    db_path = seed_cards(tmp_path)
+
+    matches = inbox_qa.search_cards("What high priority emails do I have?", db_path=str(db_path))
+
+    assert [match["priority"] for match in matches] == ["urgent", "high"]
 
 
 def test_billing_category_query(tmp_path: Path) -> None:
