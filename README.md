@@ -110,12 +110,24 @@ python daily_briefing.py --limit 20
 This command reads from SQLite only. It does not fetch mail from IMAP or modify
 the mailbox.
 
+To ask questions over stored summary cards:
+
+```bash
+python inbox_qa.py "Catch me up"
+python inbox_qa.py "What emails need my response?"
+python inbox_qa.py "Any billing emails?"
+```
+
+This command reads from SQLite only. It does not fetch mail from IMAP or modify
+the mailbox.
+
 ## Files
 
 - `config.py` loads environment-based settings.
 - `triage.py` contains the email model, triage logic, and CLI.
 - `analyzer.py` contains the read-only email intelligence CLI.
 - `daily_briefing.py` generates the daily briefing from stored summary cards.
+- `inbox_qa.py` answers questions over stored summary cards.
 - `schemas.py` defines the shared analysis dataclasses.
 - `storage.py` persists summary cards to local SQLite.
 - `.env.example` documents supported environment variables.
