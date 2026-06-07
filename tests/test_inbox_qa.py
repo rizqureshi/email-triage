@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -123,6 +124,7 @@ def test_catch_me_up_overview(tmp_path: Path) -> None:
     result = inbox_qa.answer_inbox_question("Catch me up", db_path=str(db_path))
 
     assert result["matched_count"] == 3
+    assert result["answer_mode"] == "deterministic"
     assert "recent stored summary card(s)" in result["answer"]
     assert result["matches"][0]["priority"] == "urgent"
 
@@ -187,7 +189,7 @@ def test_cli_prints_json(monkeypatch, capsys) -> None:
     monkeypatch.setattr(
         inbox_qa,
         "_parse_args",
-        Mock(return_value=Mock(question="Catch me up", limit=10)),
+        Mock(return_value=Mock(question="Catch me up", limit=10, ai=False)),
     )
     monkeypatch.setattr(
         inbox_qa,
@@ -200,3 +202,123 @@ def test_cli_prints_json(monkeypatch, capsys) -> None:
 
     assert exit_code == 0
     assert json.loads(captured.out) == {"question": "Catch me up", "answer": "ok"}
+
+
+def test_cli_ai_flag_is_parsed(monkeypatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["inbox_qa.py", "Catch me up", "--ai"])
+
+    args = inbox_qa._parse_args()
+
+    assert args.question == "Catch me up"
+    assert args.ai is True
+
+
+def test_cli_passes_ai_flag_to_answer(monkeypatch, capsys) -> None:
+    answer_mock = Mock(return_value={"question": "Catch me up", "answer": "ok"})
+    monkeypatch.setattr(
+        inbox_qa,
+        "_parse_args",
+        Mock(return_value=Mock(question="Catch me up", limit=10, ai=True)),
+    )
+    monkeypatch.setattr(inbox_qa, "answer_inbox_question", answer_mock)
+
+    exit_code = inbox_qa.main()
+    capsys.readouterr()
+
+    assert exit_code == 0
+    answer_mock.assert_called_once_with("Catch me up", limit=10, use_ai=True)
+
+
+def test_ai_without_api_key_falls_back_safely(tmp_path: Path, monkeypatch) -> None:
+    db_path = seed_cards(tmp_path)
+    monkeypatch.setattr(
+        inbox_qa.config,
+        "load_settings",
+        Mock(return_value=Mock(openai_api_key=None, openai_model="gpt-test")),
+    )
+    client_mock = Mock()
+    monkeypatch.setattr(inbox_qa, "_create_openai_client", client_mock)
+
+    result = inbox_qa.answer_inbox_question(
+        "What emails need my response?", db_path=str(db_path), use_ai=True
+    )
+
+    assert result["answer_mode"] == "deterministic_fallback"
+    assert "need your response" in result["answer"]
+    client_mock.assert_not_called()
+
+
+def test_ai_calls_openai_client_when_key_is_present(tmp_path: Path, monkeypatch) -> None:
+    db_path = seed_cards(tmp_path)
+    create_mock = Mock()
+    fake_client = Mock()
+    fake_client.responses.create.return_value = Mock(
+        output_text="You should reply to James and confirm the invoice status."
+    )
+    create_mock.return_value = fake_client
+    monkeypatch.setattr(
+        inbox_qa.config,
+        "load_settings",
+        Mock(return_value=Mock(openai_api_key="test-key", openai_model="gpt-test")),
+    )
+    monkeypatch.setattr(inbox_qa, "_create_openai_client", create_mock)
+
+    result = inbox_qa.answer_inbox_question(
+        "What emails need my response?", db_path=str(db_path), use_ai=True
+    )
+
+    assert result["answer_mode"] == "ai"
+    assert result["answer"] == "You should reply to James and confirm the invoice status."
+    create_mock.assert_called_once_with("test-key")
+    fake_client.responses.create.assert_called_once()
+    assert fake_client.responses.create.call_args.kwargs["model"] == "gpt-test"
+
+
+def test_ai_failure_falls_back_to_deterministic_answer(tmp_path: Path, monkeypatch) -> None:
+    db_path = seed_cards(tmp_path)
+    fake_client = Mock()
+    fake_client.responses.create.side_effect = RuntimeError("api unavailable")
+    monkeypatch.setattr(
+        inbox_qa.config,
+        "load_settings",
+        Mock(return_value=Mock(openai_api_key="test-key", openai_model="gpt-test")),
+    )
+    monkeypatch.setattr(inbox_qa, "_create_openai_client", Mock(return_value=fake_client))
+
+    result = inbox_qa.answer_inbox_question("Any billing emails?", db_path=str(db_path), use_ai=True)
+
+    assert result["answer_mode"] == "deterministic_fallback"
+    assert "matching email(s)" in result["answer"]
+
+
+def test_ai_sends_only_compact_matches_to_openai(monkeypatch) -> None:
+    card_with_body = make_card(
+        "<raw@example.com>",
+        "raw@example.com",
+        "Raw body check",
+        "high",
+        "support",
+        True,
+        "Stored summary only.",
+    )
+    card_with_body["body"] = "This raw email body must not be sent."
+    card_with_body["raw_body"] = "This raw body must not be sent either."
+    fake_client = Mock()
+    fake_client.responses.create.return_value = Mock(output_text="Use the stored summary.")
+    monkeypatch.setattr(inbox_qa, "search_cards", Mock(return_value=[card_with_body]))
+    monkeypatch.setattr(
+        inbox_qa.config,
+        "load_settings",
+        Mock(return_value=Mock(openai_api_key="test-key", openai_model="gpt-test")),
+    )
+    monkeypatch.setattr(inbox_qa, "_create_openai_client", Mock(return_value=fake_client))
+
+    result = inbox_qa.answer_inbox_question("What needs attention?", use_ai=True)
+
+    user_message = fake_client.responses.create.call_args.kwargs["input"][1]
+    payload = json.loads(user_message["content"])
+    sent_match = payload["matches"][0]
+    assert result["answer_mode"] == "ai"
+    assert "body" not in sent_match
+    assert "raw_body" not in sent_match
+    assert sent_match == inbox_qa._compact_match(card_with_body)

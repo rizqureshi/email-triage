@@ -114,12 +114,16 @@ To ask questions over stored summary cards:
 
 ```bash
 python inbox_qa.py "Catch me up"
+python inbox_qa.py "Catch me up" --ai
 python inbox_qa.py "What emails need my response?"
 python inbox_qa.py "Any billing emails?"
 ```
 
 This command reads from SQLite only. It does not fetch mail from IMAP or modify
-the mailbox.
+the mailbox. By default, Inbox Q&A is deterministic and does not call OpenAI.
+With `--ai`, it sends only the matched stored summary cards to OpenAI for a
+natural-language answer. This feature does not store or send raw email bodies,
+and it does not send the full database to OpenAI.
 
 ## Files
 

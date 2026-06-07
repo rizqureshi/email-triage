@@ -7,11 +7,15 @@ import json
 import re
 from collections import Counter
 
+import config
 import storage
 
 
 def answer_inbox_question(
-    question: str, limit: int = 20, db_path: str | None = None
+    question: str,
+    limit: int = 20,
+    db_path: str | None = None,
+    use_ai: bool = False,
 ) -> dict[str, object]:
     normalized_question = _normalize(question)
     if not normalized_question:
@@ -20,6 +24,7 @@ def answer_inbox_question(
             "answer": "Please ask a question about the stored summary cards.",
             "matched_count": 0,
             "matches": [],
+            "answer_mode": "deterministic",
             "safety_note": "Answered from stored summary cards only. No email was fetched or modified.",
         }
 
@@ -30,15 +35,23 @@ def answer_inbox_question(
             "answer": "I couldn’t find any matching stored summary cards.",
             "matched_count": 0,
             "matches": [],
+            "answer_mode": "deterministic",
             "safety_note": "Answered from stored summary cards only. No email was fetched or modified.",
         }
 
-    answer = _compose_answer(normalized_question, matches)
+    compact_matches = [_compact_match(card) for card in matches]
+    answer_mode = "deterministic"
+    if use_ai:
+        answer, answer_mode = _generate_ai_answer_result(question, compact_matches)
+    else:
+        answer = _compose_answer(normalized_question, matches)
+
     return {
         "question": question,
         "answer": answer,
         "matched_count": len(matches),
-        "matches": [_compact_match(card) for card in matches],
+        "matches": compact_matches,
+        "answer_mode": answer_mode,
         "safety_note": "Answered from stored summary cards only. No email was fetched or modified.",
     }
 
@@ -112,6 +125,72 @@ def _compose_answer(question: str, matches: list[dict[str, object]]) -> str:
         f"I found {len(matches)} matching email(s). The top match is "
         f"{top.get('subject')} from {top.get('sender')}."
     )
+
+
+def _generate_ai_answer(
+    question: str,
+    matches: list[dict[str, object]],
+) -> str:
+    answer, _ = _generate_ai_answer_result(question, matches)
+    return answer
+
+
+def _generate_ai_answer_result(
+    question: str,
+    matches: list[dict[str, object]],
+) -> tuple[str, str]:
+    fallback = _compose_answer(_normalize(question), matches)
+
+    try:
+        settings = config.load_settings()
+    except Exception:
+        return fallback, "deterministic_fallback"
+
+    if not settings.openai_api_key:
+        return fallback, "deterministic_fallback"
+
+    try:
+        payload = json.dumps(
+            {
+                "question": question,
+                "matches": matches,
+            }
+        )
+        client = _create_openai_client(settings.openai_api_key)
+        response = client.responses.create(
+            model=settings.openai_model,
+            input=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You answer questions using only stored email summary cards provided "
+                        "by the application. Do not claim to access live email. Do not claim "
+                        "to send, delete, archive, move, or mark email as read. If the stored "
+                        "cards do not contain enough information, say so. Be concise and "
+                        "practical."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": payload,
+                },
+            ],
+            max_output_tokens=220,
+        )
+    except Exception:
+        return fallback, "deterministic_fallback"
+
+    output_text = getattr(response, "output_text", None)
+    if not isinstance(output_text, str) or not output_text.strip():
+        return fallback, "deterministic_fallback"
+
+    return output_text.strip(), "ai"
+
+
+def _create_openai_client(api_key: str | None):
+    from openai import OpenAI
+
+    return OpenAI(api_key=api_key)
 
 
 def _score_card(card: dict[str, object], *, intent: str, terms: list[str]) -> int:
@@ -403,12 +482,17 @@ def _parse_args() -> argparse.Namespace:
         default=20,
         help="Maximum number of recent stored cards to search.",
     )
+    parser.add_argument(
+        "--ai",
+        action="store_true",
+        help="Use OpenAI to answer from matched stored summary cards only.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = _parse_args()
-    answer = answer_inbox_question(args.question, limit=args.limit)
+    answer = answer_inbox_question(args.question, limit=args.limit, use_ai=args.ai)
     print(json.dumps(answer, indent=2))
     return 0
 
