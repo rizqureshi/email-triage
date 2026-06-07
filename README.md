@@ -38,6 +38,24 @@ using the values in `.env.example`.
 
 ## Usage
 
+### Recommended CLI
+
+Use `email_assistant.py` as the main entry point for day-to-day use:
+
+```bash
+python email_assistant.py fetch --max-messages 5 --save
+python email_assistant.py briefing --limit 20
+python email_assistant.py ask "Catch me up"
+python email_assistant.py ask "What emails need my response?" --ai
+python email_assistant.py analyze --from "alex@example.com" --subject "Invoice question" \
+  --body "Can you confirm whether invoice 1042 has been paid?"
+```
+
+Default output is human-readable. Add `--json` to any subcommand for
+machine-readable output. The `--ai` flag is optional for Inbox Q&A and sends
+only matched stored summary cards to OpenAI. The tool never sends email or
+modifies the mailbox.
+
 Run with inline email text:
 
 ```bash
