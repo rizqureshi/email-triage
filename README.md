@@ -1,21 +1,36 @@
-# Email Triage
+# Email Assistant
 
-AI-assisted email triage and reply drafting for local review.
+A local, read-only email assistant for turning unread inbox messages into
+summary cards, daily briefings, and practical answers about your inbox.
 
-This project is intentionally draft-only. It does not send emails automatically,
-connect to SMTP, or call any provider's send endpoint.
-Inbox ingestion is read-only: it fetches unread messages, analyzes them, and
-prints summary cards without changing mailbox state.
+This is a prototype for personal review. It helps you understand email faster;
+it does not act on your mailbox for you.
 
 ## What It Does
 
-- Classifies an email by priority and category.
-- Summarizes the likely intent.
-- Produces a suggested reply draft for human review.
-- Extracts action items and a structured email analysis.
-- Works with a local heuristic fallback when no OpenAI API key is configured.
+- Fetches unread emails in read-only mode.
+- Summarizes messages into compact stored summary cards.
+- Highlights priority, category, response needs, and action items.
+- Generates a daily briefing from saved cards.
+- Answers questions like "Catch me up" or "What emails need my response?"
+- Analyzes a single pasted email and suggests a reply draft for review.
+
+## Safety Promise
+
+The tool:
+
+- Does not send emails.
+- Does not delete emails.
+- Does not archive emails.
+- Does not move emails.
+- Does not mark emails as read.
+- Fetches unread emails read-only.
+
+Inbox fetching uses read-only IMAP access and avoids mailbox-changing commands.
 
 ## Setup
+
+Create a virtual environment and install dependencies:
 
 ```bash
 python3 -m venv .venv
@@ -24,23 +39,24 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Add your API key to `.env` if you want model-backed triage and drafting:
+Edit `.env` with your iCloud IMAP settings. For iCloud Mail, use:
+
+- `IMAP_HOST=imap.mail.me.com`
+- Your full iCloud email address as `IMAP_USERNAME`
+- An Apple app-specific password as `IMAP_PASSWORD`
+
+Do not use your normal Apple Account password.
+
+OpenAI is optional. Add this only if you want model-backed analysis and optional
+AI answers:
 
 ```bash
 OPENAI_API_KEY=your_key_here
 ```
 
-If no API key is present, `triage.py` still runs using deterministic local
-rules.
+## Recommended Usage
 
-For read-only IMAP inbox ingestion, add your mailbox credentials to `.env`
-using the values in `.env.example`.
-
-## Usage
-
-### Recommended CLI
-
-Use `email_assistant.py` as the main entry point for day-to-day use:
+Use `email_assistant.py` as the main command:
 
 ```bash
 python email_assistant.py fetch --max-messages 5 --save
@@ -51,111 +67,34 @@ python email_assistant.py analyze --from "alex@example.com" --subject "Invoice q
   --body "Can you confirm whether invoice 1042 has been paid?"
 ```
 
-Default output is human-readable. Add `--json` to any subcommand for
-machine-readable output. The `--ai` flag is optional for Inbox Q&A and sends
-only matched stored summary cards to OpenAI. The tool never sends email or
-modifies the mailbox.
+Default output is human-readable. Add `--json` to any command for
+machine-readable output.
 
-Run with inline email text:
+The `--ai` flag is optional. Without it, Inbox Q&A uses deterministic local
+rules. With `--ai`, Inbox Q&A sends only matched stored summary cards to OpenAI,
+not raw email bodies and not the full database.
 
-```bash
-python triage.py --from "alex@example.com" --subject "Invoice question" \
-  --body "Hi, can you confirm whether invoice 1042 has been paid?"
-```
+## Troubleshooting
 
-Or pipe a message body from a file:
+**IMAP authentication failed**
 
-```bash
-python triage.py --from "alex@example.com" --subject "Follow up" < email.txt
-```
+Use your full iCloud email address and an Apple app-specific password. Do not
+use your normal Apple Account password.
 
-The output is JSON containing the triage result and a reply draft. Review and
-edit the draft before sending it yourself in your email client.
+**No cards found**
 
-### Email Analysis
-
-Run the newer read-only analyzer when you want a richer summary, sender intent,
-action item extraction, and a suggested reply:
+Run a fetch first and save the summary cards:
 
 ```bash
-python analyzer.py --from "alex@example.com" --subject "Invoice question" \
-  --body "Can you confirm whether invoice 1042 has been paid?"
+python email_assistant.py fetch --max-messages 5 --save
 ```
 
-The analyzer returns JSON with:
+**OpenAI is not used**
 
-- `summary`
-- `sender_intent`
-- `priority`
-- `category`
-- `requires_response`
-- `action_items`
-- `suggested_reply`
-- `safety_note`
+Set `OPENAI_API_KEY` in `.env` if AI-backed analysis or `ask --ai` answers are
+desired.
 
-### Read-Only Inbox Ingestion
+## Developer Details
 
-To fetch unread inbox messages and print summary cards:
-
-```bash
-python fetch_imap.py
-```
-
-You can override the mailbox or fetch limit for one run:
-
-```bash
-python fetch_imap.py --mailbox INBOX --max-messages 5
-```
-
-This command is read-only. It uses `readonly=True` mailbox selection, fetches
-unread messages, and does not delete, move, archive, or mark anything as read.
-
-To persist summary cards locally in `email_triage.db` while still printing the
-JSON output:
-
-```bash
-python fetch_imap.py --max-messages 5 --save
-```
-
-Set `EMAIL_TRIAGE_DB_PATH` if you want the database file somewhere else.
-
-To generate a daily briefing from stored summary cards:
-
-```bash
-python daily_briefing.py --limit 20
-```
-
-This command reads from SQLite only. It does not fetch mail from IMAP or modify
-the mailbox.
-
-To ask questions over stored summary cards:
-
-```bash
-python inbox_qa.py "Catch me up"
-python inbox_qa.py "Catch me up" --ai
-python inbox_qa.py "What emails need my response?"
-python inbox_qa.py "Any billing emails?"
-```
-
-This command reads from SQLite only. It does not fetch mail from IMAP or modify
-the mailbox. By default, Inbox Q&A is deterministic and does not call OpenAI.
-With `--ai`, it sends only the matched stored summary cards to OpenAI for a
-natural-language answer. This feature does not store or send raw email bodies,
-and it does not send the full database to OpenAI.
-
-## Files
-
-- `config.py` loads environment-based settings.
-- `triage.py` contains the email model, triage logic, and CLI.
-- `analyzer.py` contains the read-only email intelligence CLI.
-- `daily_briefing.py` generates the daily briefing from stored summary cards.
-- `inbox_qa.py` answers questions over stored summary cards.
-- `schemas.py` defines the shared analysis dataclasses.
-- `storage.py` persists summary cards to local SQLite.
-- `.env.example` documents supported environment variables.
-- `requirements.txt` lists runtime dependencies.
-
-## Safety
-
-This assistant never sends emails. It only creates text drafts. Keep that
-boundary intact as the project grows.
+For architecture, module documentation, individual scripts, storage details,
+testing, and future development notes, see [DEVELOPER.md](DEVELOPER.md).
