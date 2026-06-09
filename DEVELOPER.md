@@ -8,6 +8,9 @@ The project is a local, read-only email assistant. `email_assistant.py` is the
 customer-facing CLI wrapper. The lower-level scripts remain available for
 development, testing, and focused workflows.
 
+`app.py` provides a local Streamlit GUI for customer demos. It reuses the same
+backend modules as the CLI rather than duplicating business logic.
+
 The core boundary is that the assistant can read, analyze, summarize, store
 summary cards, and draft text for human review. It must not modify the mailbox
 or send email.
@@ -27,6 +30,8 @@ or send email.
    deterministic rules by default, or with OpenAI when explicitly requested.
 8. `doctor.py` checks local setup and IMAP login safety without fetching or
    modifying mailbox data.
+9. `app.py` presents the same setup, fetch, browse, briefing, Q&A, and manual
+   analysis workflows in a local browser UI.
 
 Raw email bodies are used for immediate analysis but are not stored in SQLite.
 
@@ -77,6 +82,15 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
     `analyze`, and `doctor` subcommands.
   - Defaults to human-readable output and supports `--json`.
   - The `list` command reads only from SQLite storage and must not call IMAP.
+
+- `app.py`
+  - Local Streamlit GUI for customer demos.
+  - Reuses `doctor.py`, `fetch_imap.py`, `storage.py`, `daily_briefing.py`,
+    `inbox_qa.py`, `analyzer.py`, and `email_assistant.py` formatting helpers.
+  - Keeps backend behavior in the existing modules; the UI layer should stay
+    thin and customer-friendly.
+  - Must sanitize displayed errors and never show `OPENAI_API_KEY` or
+    `IMAP_PASSWORD`.
 
 - `doctor.py`
   - Builds the setup-check report for `python email_assistant.py doctor`.
@@ -144,6 +158,12 @@ python email_assistant.py list --category billing
 python email_assistant.py list --requires-response
 ```
 
+Run the local GUI:
+
+```bash
+python -m streamlit run app.py
+```
+
 ## Storage
 
 The default SQLite database is:
@@ -201,6 +221,8 @@ For future development:
   mark email. Its IMAP check may only connect over SSL, login, and logout.
 - `email_assistant.py list` must read only from SQLite storage. It must not call
   IMAP or any mailbox-modifying code.
+- `app.py` must not add new mailbox behavior. It should call existing backend
+  functions and preserve their read-only safety constraints.
 
 ## Testing
 
@@ -211,7 +233,9 @@ python -m pytest
 ```
 
 Tests should use mocks and fakes. They should not call real IMAP servers or the
-OpenAI API. Doctor tests must mock IMAP and OpenAI-related paths.
+OpenAI API. Doctor tests must mock IMAP and OpenAI-related paths. GUI tests, if
+added, should cover helper functions only and should not run real Streamlit
+browser sessions.
 
 Current test areas include analyzer behavior, read-only IMAP fetching, storage,
 daily briefing generation, Inbox Q&A, setup diagnostics, and the
@@ -220,6 +244,5 @@ customer-facing CLI wrapper.
 ## Suggested Future Improvements
 
 - Package the project as an installable CLI.
-- Add an optional web UI.
 - Improve date normalization for action items.
 - Add optional vector or semantic search later.

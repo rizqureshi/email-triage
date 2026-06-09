@@ -85,6 +85,19 @@ python email_assistant.py list --category billing
 python email_assistant.py list --requires-response
 ```
 
+## Local GUI
+
+Run the browser-based demo app locally:
+
+```bash
+python -m streamlit run app.py
+```
+
+Streamlit opens the app in your local browser. The GUI uses the same local
+`.env` settings and the same read-only backend modules as the CLI. It does not
+send or modify emails. The CLI remains available for scripting and terminal
+workflows.
+
 ## Check Your Setup
 
 Run doctor before your first fetch or when troubleshooting:
