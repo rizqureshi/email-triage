@@ -184,6 +184,76 @@ def test_ask_json_prints_valid_json(monkeypatch, capsys) -> None:
     assert json.loads(captured.out)["answer"] == "You have two emails to review."
 
 
+def test_list_command_filters_by_high_priority_and_requires_response(monkeypatch, capsys) -> None:
+    list_mock = Mock(return_value=[make_card()])
+    fetch_mock = Mock()
+    settings_mock = Mock()
+    monkeypatch.setattr(email_assistant.storage, "list_cards", list_mock)
+    monkeypatch.setattr(email_assistant.fetch_imap, "fetch_inbox_summary_cards", fetch_mock)
+    monkeypatch.setattr(email_assistant, "load_imap_settings", settings_mock)
+
+    exit_code = email_assistant.main(["list", "--priority", "high", "--requires-response"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Stored summary cards: 1" in captured.out
+    assert "Invoice question" in captured.out
+    assert "Requires response: yes" in captured.out
+    list_mock.assert_called_once_with(
+        limit=20,
+        priority="high",
+        category=None,
+        requires_response=True,
+    )
+    fetch_mock.assert_not_called()
+    settings_mock.assert_not_called()
+
+
+def test_list_command_filters_by_category(monkeypatch, capsys) -> None:
+    list_mock = Mock(return_value=[make_card()])
+    monkeypatch.setattr(email_assistant.storage, "list_cards", list_mock)
+
+    exit_code = email_assistant.main(["list", "--category", "billing", "--limit", "7"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Category: billing" in captured.out
+    list_mock.assert_called_once_with(
+        limit=7,
+        priority=None,
+        category="billing",
+        requires_response=None,
+    )
+
+
+def test_list_json_prints_valid_json(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(email_assistant.storage, "list_cards", Mock(return_value=[make_card()]))
+
+    exit_code = email_assistant.main(["list", "--priority", "urgent", "--json"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    parsed = json.loads(captured.out)
+    assert parsed[0]["subject"] == "Invoice question"
+    email_assistant.storage.list_cards.assert_called_once_with(
+        limit=20,
+        priority="urgent",
+        category=None,
+        requires_response=None,
+    )
+
+
+def test_list_no_cards_found(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(email_assistant.storage, "list_cards", Mock(return_value=[]))
+
+    exit_code = email_assistant.main(["list"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "No stored summary cards found." in captured.out
+    assert "No email was fetched or modified." in captured.out
+
+
 def test_analyze_command_calls_analyzer(monkeypatch, capsys) -> None:
     analyze_mock = Mock(return_value=make_analysis())
     monkeypatch.setattr(email_assistant.analyzer, "analyze_email", analyze_mock)

@@ -61,6 +61,8 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
   - Does not store raw email bodies.
   - Exposes `resolve_db_path()` and `count_summary_cards()` for diagnostics
     without creating a missing database.
+  - Exposes `list_cards()` for parameterized, filtered reads over stored
+    summary cards.
 
 - `daily_briefing.py`
   - Builds a briefing from stored summary cards only.
@@ -71,9 +73,10 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
   - Uses OpenAI only when `use_ai=True` or the CLI `--ai` flag is supplied.
 
 - `email_assistant.py`
-  - Customer-facing CLI wrapper with `fetch`, `briefing`, `ask`, `analyze`, and
-    `doctor` subcommands.
+  - Customer-facing CLI wrapper with `fetch`, `list`, `briefing`, `ask`,
+    `analyze`, and `doctor` subcommands.
   - Defaults to human-readable output and supports `--json`.
+  - The `list` command reads only from SQLite storage and must not call IMAP.
 
 - `doctor.py`
   - Builds the setup-check report for `python email_assistant.py doctor`.
@@ -132,6 +135,15 @@ python email_assistant.py doctor --skip-imap-login
 python email_assistant.py doctor --json
 ```
 
+Browse stored summary cards:
+
+```bash
+python email_assistant.py list --priority urgent
+python email_assistant.py list --priority high --requires-response
+python email_assistant.py list --category billing
+python email_assistant.py list --requires-response
+```
+
 ## Storage
 
 The default SQLite database is:
@@ -187,6 +199,8 @@ For future development:
 - Do not print secrets such as IMAP passwords or OpenAI API keys.
 - `doctor.py` must never fetch, select, search, modify, copy, delete, move, or
   mark email. Its IMAP check may only connect over SSL, login, and logout.
+- `email_assistant.py list` must read only from SQLite storage. It must not call
+  IMAP or any mailbox-modifying code.
 
 ## Testing
 

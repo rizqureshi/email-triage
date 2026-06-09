@@ -80,6 +80,69 @@ def count_summary_cards(db_path: str | None = None) -> int:
     return int(row[0])
 
 
+def list_cards(
+    limit: int = 20,
+    priority: str | None = None,
+    category: str | None = None,
+    requires_response: bool | None = None,
+    db_path: str | None = None,
+) -> list[dict[str, object]]:
+    """List stored summary cards with optional filters."""
+
+    path = _resolve_db_path(db_path)
+    if limit <= 0 or not Path(path).exists():
+        return []
+
+    conditions: list[str] = []
+    params: list[object] = []
+    if priority is not None:
+        conditions.append("priority = ?")
+        params.append(priority)
+    if category is not None:
+        conditions.append("category = ?")
+        params.append(category)
+    if requires_response is not None:
+        conditions.append("requires_response = ?")
+        params.append(int(requires_response))
+
+    where_clause = ""
+    if conditions:
+        where_clause = f"WHERE {' AND '.join(conditions)}"
+
+    with sqlite3.connect(path) as connection:
+        connection.row_factory = sqlite3.Row
+        table = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='email_cards'"
+        ).fetchone()
+        if table is None:
+            return []
+
+        rows = connection.execute(
+            f"""
+            SELECT
+                message_id,
+                sender,
+                subject,
+                summary,
+                sender_intent,
+                priority,
+                category,
+                requires_response,
+                action_items_json,
+                suggested_reply,
+                safety_note,
+                fetched_at
+            FROM email_cards
+            {where_clause}
+            ORDER BY fetched_at DESC, message_id DESC
+            LIMIT ?
+            """,
+            (*params, limit),
+        ).fetchall()
+
+    return [_row_to_card(row) for row in rows]
+
+
 def list_recent_cards(limit: int = 20, db_path: str | None = None) -> list[dict[str, object]]:
     path = _resolve_db_path(db_path)
     if limit <= 0:

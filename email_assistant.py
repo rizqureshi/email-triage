@@ -19,6 +19,8 @@ from triage import EmailMessage
 
 
 SAFETY_NOTE = "No email was sent or modified."
+PRIORITY_CHOICES = ("low", "normal", "high", "urgent")
+CATEGORY_CHOICES = ("billing", "scheduling", "support", "sales", "personal", "newsletter", "other")
 
 
 def print_json(data: object) -> None:
@@ -51,6 +53,19 @@ def format_cards(cards: list[dict[str, object]]) -> str:
         lines.append("")
 
     lines.append(SAFETY_NOTE)
+    return "\n".join(lines)
+
+
+def format_stored_cards(cards: list[dict[str, object]]) -> str:
+    if not cards:
+        return "No stored summary cards found.\n\nNo email was fetched or modified."
+
+    lines = [f"Stored summary cards: {len(cards)}", ""]
+    for index, card in enumerate(cards, start=1):
+        lines.extend(_format_card_lines(index, card))
+        lines.append("")
+
+    lines.append("No email was fetched or modified.")
     return "\n".join(lines)
 
 
@@ -165,6 +180,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _run_analyze(args)
         if args.command == "doctor":
             return _run_doctor(args)
+        if args.command == "list":
+            return _run_list(args)
     except ValueError as exc:
         _print_friendly_error(exc)
         return 2
@@ -237,6 +254,20 @@ def _run_doctor(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_list(args: argparse.Namespace) -> int:
+    cards = storage.list_cards(
+        limit=args.limit,
+        priority=args.priority,
+        category=args.category,
+        requires_response=True if args.requires_response else None,
+    )
+    if args.json:
+        print_json(cards)
+    else:
+        print(format_stored_cards(cards))
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Read-only email assistant for fetching, briefing, asking, and analyzing."
@@ -270,6 +301,13 @@ def _build_parser() -> argparse.ArgumentParser:
     doctor_parser = subparsers.add_parser("doctor", help="Check local setup without touching email.")
     doctor_parser.add_argument("--json", action="store_true")
     doctor_parser.add_argument("--skip-imap-login", action="store_true")
+
+    list_parser = subparsers.add_parser("list", help="Browse stored summary cards.")
+    list_parser.add_argument("--priority", choices=PRIORITY_CHOICES)
+    list_parser.add_argument("--category", choices=CATEGORY_CHOICES)
+    list_parser.add_argument("--requires-response", action="store_true")
+    list_parser.add_argument("--limit", type=int, default=20)
+    list_parser.add_argument("--json", action="store_true")
 
     return parser
 
@@ -311,6 +349,25 @@ def _append_cards(lines: list[str], cards: object) -> None:
                 )
     else:
         lines.append("- None")
+
+
+def _format_card_lines(index: int, card: dict[str, object]) -> list[str]:
+    lines = [
+        f"{index}. {card.get('subject') or '(no subject)'}",
+        f"   From: {card.get('sender') or '(unknown sender)'}",
+        f"   Priority: {card.get('priority') or 'normal'}",
+        f"   Category: {card.get('category') or 'other'}",
+        f"   Requires response: {_yes_no(card.get('requires_response'))}",
+        f"   Summary: {card.get('summary') or '(no summary)'}",
+    ]
+    action_items = card.get("action_items", [])
+    if isinstance(action_items, list) and action_items:
+        lines.append("   Action items:")
+        for item in action_items:
+            lines.append(f"   - {_format_action_item(item)}")
+    else:
+        lines.append("   Action items: None")
+    return lines
 
 
 def _format_action_item(item: object) -> str:

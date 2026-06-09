@@ -61,6 +61,7 @@ Use `email_assistant.py` as the main command:
 ```bash
 python email_assistant.py doctor
 python email_assistant.py fetch --max-messages 5 --save
+python email_assistant.py list --priority urgent
 python email_assistant.py briefing --limit 20
 python email_assistant.py ask "Catch me up"
 python email_assistant.py ask "What emails need my response?" --ai
@@ -74,6 +75,15 @@ machine-readable output.
 The `--ai` flag is optional. Without it, Inbox Q&A uses deterministic local
 rules. With `--ai`, Inbox Q&A sends only matched stored summary cards to OpenAI,
 not raw email bodies and not the full database.
+
+Browse saved summary cards without fetching mail:
+
+```bash
+python email_assistant.py list --priority urgent
+python email_assistant.py list --priority high --requires-response
+python email_assistant.py list --category billing
+python email_assistant.py list --requires-response
+```
 
 ## Check Your Setup
 

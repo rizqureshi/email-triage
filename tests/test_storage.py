@@ -14,6 +14,8 @@ def make_card(
     message_id: str = "<message-1@example.com>",
     requires_response: bool = True,
     summary: str = "Needs attention.",
+    priority: str = "high",
+    category: str = "billing",
 ) -> dict[str, object]:
     return {
         "message_id": message_id,
@@ -21,8 +23,8 @@ def make_card(
         "subject": "Invoice question",
         "summary": summary,
         "sender_intent": "Requesting confirmation.",
-        "priority": "high",
-        "category": "billing",
+        "priority": priority,
+        "category": category,
         "requires_response": requires_response,
         "action_items": [
             {
@@ -145,6 +147,68 @@ def test_list_cards_requiring_response(tmp_path: Path, monkeypatch: pytest.Monke
     cards = storage.list_cards_requiring_response(limit=10, db_path=str(db_path))
 
     assert [card["message_id"] for card in cards] == ["<3@example.com>", "<1@example.com>"]
+    assert all(card["requires_response"] is True for card in cards)
+
+
+def test_list_cards_filters_by_urgent_priority(tmp_path: Path) -> None:
+    db_path = tmp_path / "email_triage.db"
+    storage.save_summary_cards(
+        [
+            make_card(message_id="<1@example.com>", priority="urgent"),
+            make_card(message_id="<2@example.com>", priority="high"),
+        ],
+        str(db_path),
+    )
+
+    cards = storage.list_cards(priority="urgent", db_path=str(db_path))
+
+    assert [card["message_id"] for card in cards] == ["<1@example.com>"]
+
+
+def test_list_cards_filters_by_high_priority(tmp_path: Path) -> None:
+    db_path = tmp_path / "email_triage.db"
+    storage.save_summary_cards(
+        [
+            make_card(message_id="<1@example.com>", priority="urgent"),
+            make_card(message_id="<2@example.com>", priority="high"),
+            make_card(message_id="<3@example.com>", priority="normal"),
+        ],
+        str(db_path),
+    )
+
+    cards = storage.list_cards(priority="high", db_path=str(db_path))
+
+    assert [card["message_id"] for card in cards] == ["<2@example.com>"]
+
+
+def test_list_cards_filters_by_category(tmp_path: Path) -> None:
+    db_path = tmp_path / "email_triage.db"
+    storage.save_summary_cards(
+        [
+            make_card(message_id="<1@example.com>", category="billing"),
+            make_card(message_id="<2@example.com>", category="support"),
+        ],
+        str(db_path),
+    )
+
+    cards = storage.list_cards(category="billing", db_path=str(db_path))
+
+    assert [card["message_id"] for card in cards] == ["<1@example.com>"]
+
+
+def test_list_cards_filters_requiring_response(tmp_path: Path) -> None:
+    db_path = tmp_path / "email_triage.db"
+    storage.save_summary_cards(
+        [
+            make_card(message_id="<1@example.com>", requires_response=True),
+            make_card(message_id="<2@example.com>", requires_response=False),
+        ],
+        str(db_path),
+    )
+
+    cards = storage.list_cards(requires_response=True, db_path=str(db_path))
+
+    assert [card["message_id"] for card in cards] == ["<1@example.com>"]
     assert all(card["requires_response"] is True for card in cards)
 
 
