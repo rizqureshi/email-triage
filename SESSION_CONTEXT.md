@@ -1,17 +1,30 @@
 # Session Context
 
-Last updated: 2026-06-04
+Last updated: 2026-06-07
 
 ## Project
 
-This repo is an email triage and reply-draft assistant at:
+This repo is an email assistant at:
 
 `/Users/RizwanHome/Documents/work/git/email-triage`
 
 The project must remain draft-only and read-only. Do not add SMTP, email
-sending, deleting, moving, archiving, or mark-read behavior.
+sending, deleting, moving, archiving, or mark-read behavior. Do not store raw
+email bodies. Do not print secrets such as IMAP passwords or OpenAI API keys.
 
 ## What Exists
+
+- `email_assistant.py`
+  - New customer-facing CLI wrapper.
+  - Supports subcommands: `fetch`, `briefing`, `ask`, and `analyze`.
+  - Defaults to human-readable output and supports `--json`.
+  - `fetch` wraps read-only IMAP summary-card fetching and supports
+    `--max-messages`, `--mailbox`, `--save`, and `--json`.
+  - `briefing` wraps `daily_briefing.generate_daily_briefing()`.
+  - `ask` wraps `inbox_qa.answer_inbox_question()` and supports optional `--ai`.
+  - `analyze` wraps `analyzer.analyze_email()` and reads stdin when `--body` is
+    omitted.
+  - Friendly error handling avoids printing secrets.
 
 - `triage.py`
   - Defines `EmailMessage` and `TriageResult`.
@@ -47,6 +60,7 @@ sending, deleting, moving, archiving, or mark-read behavior.
     and fetched timestamp.
   - Default database path is `email_triage.db`, override via
     `EMAIL_TRIAGE_DB_PATH`.
+  - Does not store raw email bodies.
 
 - `daily_briefing.py`
   - Builds a briefing from stored summary cards only.
@@ -57,7 +71,13 @@ sending, deleting, moving, archiving, or mark-read behavior.
   - Answers questions over stored summary cards only.
   - Supports catch-up, response, urgent, high-priority, billing, action-item,
     and sender queries with deterministic rules.
-  - Does not call OpenAI and does not fetch from IMAP.
+  - Default behavior is deterministic and free: `use_ai=False`.
+  - Optional Phase 2 AI mode is available with `use_ai=True` or CLI `--ai`.
+  - AI mode first calls `search_cards()` and sends only `_compact_match(card)`
+    data for matched stored summary cards to OpenAI.
+  - AI mode does not send raw email bodies or the full database.
+  - If OpenAI is unavailable, missing, or fails, it falls back safely with
+    `answer_mode="deterministic_fallback"`.
 
 - `analyzer.py`
   - Read-only email intelligence CLI.
@@ -66,7 +86,14 @@ sending, deleting, moving, archiving, or mark-read behavior.
 
 - `schemas.py`
   - Defines `ActionItem` and `EmailAnalysis`.
-  - `ActionItem` now includes `text`, `owner`, `due_date`, and `priority`.
+  - `ActionItem` includes `text`, `owner`, `due_date`, and `priority`.
+
+- Documentation
+  - `README.md` is now a customer-friendly quick start focused on
+    `email_assistant.py`.
+  - `DEVELOPER.md` contains architecture, data flow, module docs, individual
+    script usage, storage details, OpenAI boundaries, safety constraints,
+    testing notes, and suggested future improvements.
 
 - `.env.example`
   - Contains OpenAI settings, IMAP settings, and `EMAIL_TRIAGE_DB_PATH`.
@@ -84,25 +111,74 @@ sending, deleting, moving, archiving, or mark-read behavior.
   - `tests/test_storage.py`
   - `tests/test_daily_briefing.py`
   - `tests/test_inbox_qa.py`
-  - All IMAP and storage tests use mocks/fakes and do not connect to a real
-    email account.
+  - `tests/test_email_assistant.py`
+  - All IMAP/OpenAI-related tests use mocks/fakes and do not connect to a real
+    email account or call the real OpenAI API.
+
+## Recent Work Completed
+
+- Implemented optional OpenAI-powered Inbox Q&A over retrieved stored summary
+  cards only.
+- Added `answer_mode` values: `deterministic`, `ai`, and
+  `deterministic_fallback`.
+- Added `--ai` support to `inbox_qa.py`.
+- Added `email_assistant.py` as the recommended customer-facing CLI wrapper.
+- Added tests for the AI Inbox Q&A path and the new CLI wrapper.
+- Split documentation into customer README and technical DEVELOPER guide.
 
 ## Verification
+
+The requested command currently fails in this shell because `python` is not on
+PATH:
+
+```text
+python -m pytest
+/bin/bash: python: command not found
+```
 
 The last successful test command was run inside the local virtual environment:
 
 ```bash
-source .venv/bin/activate && python -m pytest
+.venv/bin/python -m pytest
 ```
 
-Result at that time:
+Result:
 
 ```text
-60 passed
+77 passed
 ```
+
+## Current Worktree Notes
+
+Recent work may still be uncommitted. Before committing, check:
+
+```bash
+git status --short
+git diff
+```
+
+Expected changed/new files from the latest work include:
+
+- `README.md`
+- `DEVELOPER.md`
+- `email_assistant.py`
+- `tests/test_email_assistant.py`
+- `inbox_qa.py`
+- `tests/test_inbox_qa.py`
+- `SESSION_CONTEXT.md`
 
 ## Suggested Next Step
 
-Tomorrow, try the read-only flow end to end: run `python fetch_imap.py --save`
-to store summary cards, then `python daily_briefing.py --limit 20` and
-`python inbox_qa.py "Catch me up"` against the saved SQLite data.
+Tomorrow, review the accumulated diff, run `.venv/bin/python -m pytest`, and
+commit the completed phases if everything still looks good.
+
+After committing, try the read-only flow end to end:
+
+```bash
+python email_assistant.py fetch --max-messages 5 --save
+python email_assistant.py briefing --limit 20
+python email_assistant.py ask "Catch me up"
+python email_assistant.py ask "What emails need my response?" --ai
+```
+
+Only run `fetch` when the user explicitly approves connecting to the real inbox.

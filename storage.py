@@ -13,6 +13,12 @@ from typing import Any
 DEFAULT_DB_PATH = "email_triage.db"
 
 
+def resolve_db_path(db_path: str | None = None) -> str:
+    """Resolve the SQLite path without creating files or directories."""
+
+    return _resolve_db_path(db_path)
+
+
 def init_db(db_path: str | None = None) -> None:
     path = _resolve_db_path(db_path)
     _ensure_parent_directory(path)
@@ -51,6 +57,27 @@ def save_summary_cards(cards: list[dict[str, object]], db_path: str | None = Non
     with sqlite3.connect(path) as connection:
         for card in cards:
             _upsert_card(connection, card)
+
+
+def count_summary_cards(db_path: str | None = None) -> int:
+    """Count stored summary cards without creating a missing database."""
+
+    path = _resolve_db_path(db_path)
+    if not Path(path).exists():
+        return 0
+
+    with sqlite3.connect(path) as connection:
+        table = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='email_cards'"
+        ).fetchone()
+        if table is None:
+            return 0
+
+        row = connection.execute("SELECT COUNT(*) FROM email_cards").fetchone()
+
+    if row is None:
+        return 0
+    return int(row[0])
 
 
 def list_recent_cards(limit: int = 20, db_path: str | None = None) -> list[dict[str, object]]:

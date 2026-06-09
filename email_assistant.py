@@ -10,6 +10,7 @@ from typing import Sequence
 
 import analyzer
 import daily_briefing
+import doctor
 import fetch_imap
 import inbox_qa
 import storage
@@ -162,6 +163,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _run_ask(args)
         if args.command == "analyze":
             return _run_analyze(args)
+        if args.command == "doctor":
+            return _run_doctor(args)
     except ValueError as exc:
         _print_friendly_error(exc)
         return 2
@@ -225,6 +228,15 @@ def _run_analyze(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_doctor(args: argparse.Namespace) -> int:
+    report = doctor.run_doctor(skip_imap_login=args.skip_imap_login)
+    if args.json:
+        print_json(report)
+    else:
+        print(doctor.format_doctor_report(report))
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Read-only email assistant for fetching, briefing, asking, and analyzing."
@@ -254,6 +266,10 @@ def _build_parser() -> argparse.ArgumentParser:
     analyze_parser.add_argument("--subject", default="", help="Email subject")
     analyze_parser.add_argument("--body", default=None, help="Email body. Defaults to stdin.")
     analyze_parser.add_argument("--json", action="store_true")
+
+    doctor_parser = subparsers.add_parser("doctor", help="Check local setup without touching email.")
+    doctor_parser.add_argument("--json", action="store_true")
+    doctor_parser.add_argument("--skip-imap-login", action="store_true")
 
     return parser
 

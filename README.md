@@ -59,6 +59,7 @@ OPENAI_API_KEY=your_key_here
 Use `email_assistant.py` as the main command:
 
 ```bash
+python email_assistant.py doctor
 python email_assistant.py fetch --max-messages 5 --save
 python email_assistant.py briefing --limit 20
 python email_assistant.py ask "Catch me up"
@@ -73,6 +74,30 @@ machine-readable output.
 The `--ai` flag is optional. Without it, Inbox Q&A uses deterministic local
 rules. With `--ai`, Inbox Q&A sends only matched stored summary cards to OpenAI,
 not raw email bodies and not the full database.
+
+## Check Your Setup
+
+Run doctor before your first fetch or when troubleshooting:
+
+```bash
+python email_assistant.py doctor
+```
+
+Doctor validates local configuration, checks whether `.env` and the local
+database exist, and can test IMAP login without fetching or modifying email. It
+never prints secrets.
+
+Use `--skip-imap-login` if you only want local configuration checks:
+
+```bash
+python email_assistant.py doctor --skip-imap-login
+```
+
+Use `--json` for machine-readable output:
+
+```bash
+python email_assistant.py doctor --json
+```
 
 ## Troubleshooting
 

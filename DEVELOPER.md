@@ -25,6 +25,8 @@ or send email.
 6. `daily_briefing.py` reads stored cards and builds a briefing.
 7. `inbox_qa.py` searches stored cards and answers inbox questions with
    deterministic rules by default, or with OpenAI when explicitly requested.
+8. `doctor.py` checks local setup and IMAP login safety without fetching or
+   modifying mailbox data.
 
 Raw email bodies are used for immediate analysis but are not stored in SQLite.
 
@@ -57,6 +59,8 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
 - `storage.py`
   - Persists summary cards to local SQLite.
   - Does not store raw email bodies.
+  - Exposes `resolve_db_path()` and `count_summary_cards()` for diagnostics
+    without creating a missing database.
 
 - `daily_briefing.py`
   - Builds a briefing from stored summary cards only.
@@ -67,9 +71,17 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
   - Uses OpenAI only when `use_ai=True` or the CLI `--ai` flag is supplied.
 
 - `email_assistant.py`
-  - Customer-facing CLI wrapper with `fetch`, `briefing`, `ask`, and `analyze`
-    subcommands.
+  - Customer-facing CLI wrapper with `fetch`, `briefing`, `ask`, `analyze`, and
+    `doctor` subcommands.
   - Defaults to human-readable output and supports `--json`.
+
+- `doctor.py`
+  - Builds the setup-check report for `python email_assistant.py doctor`.
+  - Checks `.env`, OpenAI configuration, IMAP settings, optional IMAP login, and
+    database/card count.
+  - Must not print secrets such as `OPENAI_API_KEY` or `IMAP_PASSWORD`.
+  - The IMAP login check is intentionally limited to SSL connect, `login`, and
+    `logout`.
 
 ## Individual Script Usage
 
@@ -110,6 +122,14 @@ python inbox_qa.py "Catch me up"
 python inbox_qa.py "What emails need my response?"
 python inbox_qa.py "Any billing emails?"
 python inbox_qa.py "Catch me up" --ai
+```
+
+Check customer setup:
+
+```bash
+python email_assistant.py doctor
+python email_assistant.py doctor --skip-imap-login
+python email_assistant.py doctor --json
 ```
 
 ## Storage
@@ -165,6 +185,8 @@ For future development:
 - Do not mark emails as read.
 - Do not store raw email bodies.
 - Do not print secrets such as IMAP passwords or OpenAI API keys.
+- `doctor.py` must never fetch, select, search, modify, copy, delete, move, or
+  mark email. Its IMAP check may only connect over SSL, login, and logout.
 
 ## Testing
 
@@ -175,14 +197,14 @@ python -m pytest
 ```
 
 Tests should use mocks and fakes. They should not call real IMAP servers or the
-OpenAI API.
+OpenAI API. Doctor tests must mock IMAP and OpenAI-related paths.
 
 Current test areas include analyzer behavior, read-only IMAP fetching, storage,
-daily briefing generation, Inbox Q&A, and the customer-facing CLI wrapper.
+daily briefing generation, Inbox Q&A, setup diagnostics, and the
+customer-facing CLI wrapper.
 
 ## Suggested Future Improvements
 
-- Add a `doctor` or setup-check command for environment and IMAP validation.
 - Package the project as an installable CLI.
 - Add an optional web UI.
 - Improve date normalization for action items.
