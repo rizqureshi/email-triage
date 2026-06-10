@@ -261,7 +261,7 @@ def test_human_command_contains_useful_checkmarks(monkeypatch: pytest.MonkeyPatc
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert "Email Assistant Doctor" in captured.out
+    assert "MailTriage AI Doctor" in captured.out
     assert "✓ IMAP login successful" in captured.out
     assert "✓ Stored summary cards: 12" in captured.out
     assert "✓ Doctor did not fetch" in captured.out

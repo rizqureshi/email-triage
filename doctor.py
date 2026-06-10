@@ -43,7 +43,7 @@ def format_doctor_report(report: dict[str, object]) -> str:
     database = _section(report, "database")
 
     lines = [
-        "Email Assistant Doctor",
+        "MailTriage AI Doctor",
         "",
         "Environment:",
     ]

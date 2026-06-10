@@ -1,4 +1,4 @@
-"""Local Streamlit GUI for the email assistant."""
+"""Local Streamlit GUI for MailTriage AI."""
 
 from __future__ import annotations
 
@@ -37,8 +37,8 @@ CATEGORY_OPTIONS = [
 
 
 def main() -> None:
-    st.set_page_config(page_title="Email Assistant", page_icon="@", layout="wide")
-    st.title("Email Assistant")
+    st.set_page_config(page_title="MailTriage AI", page_icon="@", layout="wide")
+    st.title("MailTriage AI")
     st.info(SAFETY_NOTE)
 
     tabs = st.tabs(
@@ -199,7 +199,7 @@ def _show_action_items(
         st.download_button(
             "Download CSV",
             data=action_items_to_csv(action_items),
-            file_name="email_assistant_action_items.csv",
+            file_name="mailtriage_ai_action_items.csv",
             mime="text/csv",
         )
     else:
@@ -356,7 +356,7 @@ def _safe_error_message(exc: Exception) -> str:
     if "OPENAI_API_KEY" in message:
         return "OpenAI settings need attention. Check your .env configuration."
     if not message.strip():
-        return "The email assistant could not complete that action."
+        return "MailTriage AI could not complete that action."
     return message
 
 

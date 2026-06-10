@@ -1,7 +1,8 @@
-# Email Assistant
+# MailTriage AI
 
-A local, read-only email assistant for turning unread inbox messages into
-summary cards, daily briefings, and practical answers about your inbox.
+MailTriage AI is a local, read-only email assistant for turning unread inbox
+messages into summary cards, daily briefings, and practical answers about your
+inbox.
 
 This is a prototype for personal review. It helps you understand email faster;
 it does not act on your mailbox for you.

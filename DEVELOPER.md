@@ -1,11 +1,11 @@
 # Developer Guide
 
-Technical notes for the email assistant prototype.
+Technical notes for the MailTriage AI prototype.
 
 ## Architecture Overview
 
-The project is a local, read-only email assistant. `email_assistant.py` is the
-customer-facing CLI wrapper. The lower-level scripts remain available for
+MailTriage AI is a local, read-only email assistant. `email_assistant.py` is
+the customer-facing CLI wrapper. The lower-level scripts remain available for
 development, testing, and focused workflows.
 
 `app.py` provides a local Streamlit GUI for customer demos. It reuses the same

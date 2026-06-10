@@ -1,4 +1,4 @@
-"""Customer-friendly CLI wrapper for the read-only email assistant."""
+"""Customer-friendly CLI wrapper for MailTriage AI."""
 
 from __future__ import annotations
 
@@ -325,7 +325,7 @@ def _run_review(args: argparse.Namespace) -> int:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Read-only email assistant for fetching, briefing, asking, and analyzing."
+        description="MailTriage AI read-only CLI for fetching, briefing, asking, and analyzing."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -473,7 +473,7 @@ def _print_friendly_error(exc: Exception) -> None:
     elif "No such file" in message or "unable to open database" in message:
         safe_message = "No stored summary cards were found yet. Run fetch with --save first."
     else:
-        safe_message = "The email assistant could not complete that command."
+        safe_message = "MailTriage AI could not complete that command."
 
     print(f"Error: {safe_message}", file=sys.stderr)
 

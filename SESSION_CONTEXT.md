@@ -6,7 +6,7 @@ Last updated: 2026-06-10
 
 Repo: `/Users/RizwanHome/Documents/work/git/email-triage`
 
-The project is a local, customer-friendly, read-only email assistant. Preserve
+The project is MailTriage AI, a local, customer-friendly, read-only email assistant. Preserve
 the safety boundary:
 
 - Do not add SMTP.
