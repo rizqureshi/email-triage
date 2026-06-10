@@ -368,10 +368,7 @@ def _safe_error_message(exc: Exception) -> str:
             message = message.replace(secret, "[secret]")
 
     if "IMAP authentication failed" in message:
-        return (
-            "IMAP authentication failed. For iCloud Mail, use your full iCloud email "
-            "address and an Apple app-specific password."
-        )
+        return _imap_authentication_error_message()
     if "IMAP_" in message and "required" in message:
         return "Missing IMAP settings. Check your .env configuration."
     if "OPENAI_API_KEY" in message:
@@ -379,6 +376,14 @@ def _safe_error_message(exc: Exception) -> str:
     if not message.strip():
         return "MailTriage AI could not complete that action."
     return message
+
+
+def _imap_authentication_error_message() -> str:
+    try:
+        settings = load_imap_settings()
+    except Exception:
+        return email_providers.authentication_help("")
+    return email_providers.authentication_help(settings.provider_key)
 
 
 if __name__ == "__main__":

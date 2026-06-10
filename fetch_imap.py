@@ -17,6 +17,7 @@ from html.parser import HTMLParser
 
 from analyzer import analyze_email
 from config import ImapSettings, load_imap_settings
+from email_providers import authentication_help
 from schemas import EmailAnalysis
 import storage
 from triage import EmailMessage
@@ -32,11 +33,7 @@ def fetch_unread_emails(settings: ImapSettings) -> list[tuple[str, EmailMessage]
         try:
             client.login(settings.username, settings.password)
         except imaplib.IMAP4.error as exc:
-            raise RuntimeError(
-                "IMAP authentication failed. For iCloud Mail, use your full iCloud email "
-                "address as IMAP_USERNAME and an Apple app-specific password as IMAP_PASSWORD. "
-                "Do not use your normal Apple Account password."
-            ) from exc
+            raise RuntimeError(authentication_help(settings.provider_key)) from exc
         _ensure_ok(client.select(settings.mailbox, readonly=True), "select mailbox")
         search_status, search_data = client.search(None, "UNSEEN")
         _ensure_ok((search_status, search_data), "search unread messages")

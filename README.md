@@ -80,6 +80,9 @@ python email_assistant.py providers
 python email_assistant.py providers --json
 ```
 
+Authentication help is provider-specific. Run `python email_assistant.py doctor`
+if login fails.
+
 Example iCloud setup:
 
 ```bash

@@ -57,6 +57,8 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
   - Defines provider presets for `icloud`, `gmail`, `outlook`, `yahoo`, `aol`,
     and `custom`.
   - Exposes `get_provider()`, `list_providers()`, and `provider_choices()`.
+  - Exposes `authentication_help()` for provider-specific IMAP authentication
+    failure guidance.
   - Presets include display name, IMAP host/port, SSL flag, default mailbox,
     setup notes, app-password guidance, and whether OAuth may be needed later.
 
@@ -127,6 +129,8 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
     thin and customer-friendly.
   - Must sanitize displayed errors and never show `OPENAI_API_KEY` or
     `IMAP_PASSWORD`.
+  - Uses provider-specific authentication help when IMAP login fails, without
+    connecting to IMAP from the error helper.
 
 - `doctor.py`
   - Builds the setup-check report for `python email_assistant.py doctor`.
@@ -285,6 +289,11 @@ Provider presets are IMAP-only. Gmail API OAuth and Microsoft Graph OAuth are
 deferred intentionally so this step can preserve the existing read-only IMAP
 behavior. Future OAuth work should be introduced as a separate provider/auth
 layer with explicit tests and safety review.
+
+Provider-specific authentication help lives in `email_providers.py`. `doctor.py`,
+`fetch_imap.py`, and the Streamlit GUI use that helper so iCloud, Gmail,
+Outlook / Microsoft 365, Yahoo, AOL, and custom IMAP users see relevant
+guidance without exposing passwords.
 
 ## Safety Constraints
 

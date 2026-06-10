@@ -36,6 +36,18 @@ def make_settings() -> ImapSettings:
     )
 
 
+def make_provider_settings(provider_key: str) -> ImapSettings:
+    return ImapSettings(
+        host="imap.example.com",
+        port=993,
+        username="user@example.com",
+        password="secret",
+        mailbox="INBOX",
+        max_messages=2,
+        provider_key=provider_key,
+    )
+
+
 def test_load_imap_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("IMAP_HOST", "imap.example.com")
     monkeypatch.setenv("IMAP_USERNAME", "user@example.com")
@@ -265,6 +277,25 @@ def test_fetch_unread_emails_authentication_failure(
 
     client.select.assert_not_called()
     client.search.assert_not_called()
+    client.logout.assert_called_once()
+
+
+def test_fetch_unread_emails_authentication_failure_uses_provider_guidance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = Mock()
+    client.login.side_effect = fetch_imap.imaplib.IMAP4.error("AUTH failed")
+    monkeypatch.setattr(fetch_imap.imaplib, "IMAP4_SSL", Mock(return_value=client))
+    monkeypatch.setattr(fetch_imap.ssl, "create_default_context", Mock(return_value=object()))
+
+    with pytest.raises(RuntimeError, match="IMAP authentication failed for Gmail"):
+        fetch_imap.fetch_unread_emails(make_provider_settings("gmail"))
+
+    client.select.assert_not_called()
+    client.search.assert_not_called()
+    client.fetch.assert_not_called()
+    client.store.assert_not_called()
+    client.copy.assert_not_called()
     client.logout.assert_called_once()
 
 

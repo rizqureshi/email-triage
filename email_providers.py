@@ -121,3 +121,40 @@ def list_providers() -> list[ProviderPreset]:
 
 def provider_choices() -> tuple[str, ...]:
     return ("icloud", "gmail", "outlook", "yahoo", "aol", "custom")
+
+
+def authentication_help(provider_key: str) -> str:
+    key = (provider_key or "").strip().lower()
+    messages = {
+        "icloud": (
+            "IMAP authentication failed for iCloud Mail. Use your full iCloud email "
+            "address and an Apple app-specific password."
+        ),
+        "gmail": (
+            "IMAP authentication failed for Gmail. Enable IMAP in Gmail settings. "
+            "For password-based access, use Google 2-Step Verification and an app "
+            "password where available."
+        ),
+        "outlook": (
+            "IMAP authentication failed for Outlook / Microsoft 365. Personal Outlook "
+            "accounts may work with IMAP, but Microsoft 365 business tenants may "
+            "require modern authentication/OAuth depending on tenant policy."
+        ),
+        "yahoo": (
+            "IMAP authentication failed for Yahoo Mail. Use a Yahoo app password if "
+            "normal password login is not accepted."
+        ),
+        "aol": (
+            "IMAP authentication failed for AOL Mail. Use an AOL app password if "
+            "normal password login is not accepted."
+        ),
+        "custom": (
+            "IMAP authentication failed for Custom IMAP. Check the IMAP host, port, "
+            "username, password or app password, and mailbox settings provided by "
+            "your email provider."
+        ),
+    }
+    return messages.get(
+        key,
+        "IMAP authentication failed. Check your email provider's IMAP settings and credentials.",
+    )

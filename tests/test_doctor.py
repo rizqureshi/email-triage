@@ -7,6 +7,7 @@ from unittest.mock import Mock
 import pytest
 
 import doctor
+import email_providers
 import email_assistant
 import storage
 
@@ -195,11 +196,23 @@ def test_imap_login_success_uses_login_logout_only(
     ]
 
 
-def test_imap_authentication_failure_does_not_expose_password(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+@pytest.mark.parametrize(
+    ("provider_key", "expected_message"),
+    [
+        ("gmail", "IMAP authentication failed for Gmail"),
+        ("outlook", "IMAP authentication failed for Outlook / Microsoft 365"),
+    ],
+)
+def test_imap_authentication_failure_uses_provider_guidance_without_exposing_password(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    provider_key: str,
+    expected_message: str,
 ) -> None:
     clear_app_env(monkeypatch)
     set_minimal_imap_env(monkeypatch)
+    monkeypatch.setenv("EMAIL_PROVIDER", provider_key)
+    monkeypatch.delenv("IMAP_HOST", raising=False)
     monkeypatch.chdir(tmp_path)
     client = FakeImapClient()
     client.login = Mock(side_effect=imaplib.IMAP4.error("bad secret-password"))
@@ -210,9 +223,11 @@ def test_imap_authentication_failure_does_not_expose_password(
     output = doctor.format_doctor_report(report)
 
     assert report["imap"]["login_successful"] is False
-    assert doctor.ICLOUD_AUTH_MESSAGE in str(report["imap"]["error"])
+    assert expected_message in str(report["imap"]["error"])
+    assert str(report["imap"]["error"]) == email_providers.authentication_help(provider_key)
     assert "secret-password" not in json.dumps(report)
     assert "secret-password" not in output
+    assert client.select.call_count == 0 if isinstance(client.select, Mock) else True
 
 
 def test_database_missing_returns_exists_false_and_count_zero(

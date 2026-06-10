@@ -10,15 +10,10 @@ from typing import Any
 
 import storage
 from config import ImapSettings, load_imap_settings, load_settings
-from email_providers import get_provider
+from email_providers import authentication_help, get_provider
 
 
 SAFETY_NOTE = "Doctor did not fetch, send, delete, archive, move, or mark any email as read."
-ICLOUD_AUTH_MESSAGE = (
-    "IMAP authentication failed. For iCloud Mail, use your full iCloud email address "
-    "and an Apple app-specific password."
-)
-
 
 def run_doctor(skip_imap_login: bool = False) -> dict[str, object]:
     """Run local setup diagnostics without fetching or modifying email."""
@@ -170,7 +165,7 @@ def _check_imap(skip_imap_login: bool) -> dict[str, object]:
     try:
         _check_imap_login(settings)
     except imaplib.IMAP4.error:
-        imap_report["error"] = ICLOUD_AUTH_MESSAGE
+        imap_report["error"] = authentication_help(settings.provider_key)
         return imap_report
     except OSError as exc:
         imap_report["error"] = f"Could not connect to IMAP server: {_sanitize_error(exc)}"

@@ -30,3 +30,26 @@ def test_provider_choices_include_supported_providers() -> None:
 def test_unknown_provider_error_lists_valid_choices() -> None:
     with pytest.raises(ValueError, match="Valid providers: icloud, gmail, outlook"):
         email_providers.get_provider("fastmail")
+
+
+@pytest.mark.parametrize(
+    ("provider_key", "expected"),
+    [
+        ("icloud", "IMAP authentication failed for iCloud Mail"),
+        ("gmail", "IMAP authentication failed for Gmail"),
+        ("outlook", "IMAP authentication failed for Outlook / Microsoft 365"),
+        ("yahoo", "IMAP authentication failed for Yahoo Mail"),
+        ("aol", "IMAP authentication failed for AOL Mail"),
+        ("custom", "IMAP authentication failed for Custom IMAP"),
+    ],
+)
+def test_authentication_help_returns_provider_specific_message(
+    provider_key: str, expected: str
+) -> None:
+    assert expected in email_providers.authentication_help(provider_key)
+
+
+def test_authentication_help_returns_generic_message_for_unknown_provider() -> None:
+    assert email_providers.authentication_help("fastmail") == (
+        "IMAP authentication failed. Check your email provider's IMAP settings and credentials."
+    )
