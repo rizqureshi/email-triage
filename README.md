@@ -11,6 +11,7 @@ it does not act on your mailbox for you.
 - Fetches unread emails in read-only mode.
 - Summarizes messages into compact stored summary cards.
 - Highlights priority, category, response needs, and action items.
+- Runs a one-step inbox review that fetches, saves, briefs, and lists actions.
 - Generates a daily briefing from saved cards.
 - Answers questions like "Catch me up" or "What emails need my response?"
 - Analyzes a single pasted email and suggests a reply draft for review.
@@ -60,6 +61,7 @@ Use `email_assistant.py` as the main command:
 
 ```bash
 python email_assistant.py doctor
+python email_assistant.py review
 python email_assistant.py fetch --max-messages 5 --save
 python email_assistant.py list --priority urgent
 python email_assistant.py actions
@@ -76,6 +78,17 @@ machine-readable output.
 The `--ai` flag is optional. Without it, Inbox Q&A uses deterministic local
 rules. With `--ai`, Inbox Q&A sends only matched stored summary cards to OpenAI,
 not raw email bodies and not the full database.
+
+Run the easiest one-step workflow:
+
+```bash
+python email_assistant.py review
+python email_assistant.py review --max-messages 10
+python email_assistant.py review --json
+```
+
+Inbox review fetches unread emails read-only, saves local summary cards,
+generates a briefing, and shows action items. It does not send or modify email.
 
 Browse saved summary cards without fetching mail:
 

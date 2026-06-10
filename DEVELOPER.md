@@ -25,13 +25,16 @@ or send email.
 4. `fetch_imap.py` combines message metadata and analysis into a compact summary
    card.
 5. `storage.py` optionally saves summary cards to SQLite.
-6. `daily_briefing.py` reads stored cards and builds a briefing.
-7. `inbox_qa.py` searches stored cards and answers inbox questions with
+6. `review.py` orchestrates the one-step inbox review: fetch unread cards,
+   save them, generate a briefing, list action items, and list urgent,
+   high-priority, and response-needed stored cards.
+7. `daily_briefing.py` reads stored cards and builds a briefing.
+8. `inbox_qa.py` searches stored cards and answers inbox questions with
    deterministic rules by default, or with OpenAI when explicitly requested.
-8. `doctor.py` checks local setup and IMAP login safety without fetching or
+9. `doctor.py` checks local setup and IMAP login safety without fetching or
    modifying mailbox data.
-9. `app.py` presents the same setup, fetch, browse, briefing, Q&A, and manual
-   analysis workflows in a local browser UI.
+10. `app.py` presents the same setup, fetch, browse, inbox review, briefing,
+    Q&A, and manual analysis workflows in a local browser UI.
 
 Raw email bodies are used for immediate analysis but are not stored in SQLite.
 
@@ -74,15 +77,26 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
 - `daily_briefing.py`
   - Builds a briefing from stored summary cards only.
 
+- `review.py`
+  - Provides `run_inbox_review(max_messages=10, mailbox="INBOX")`.
+  - Loads IMAP settings, applies fetch overrides, calls the existing read-only
+    fetch path, saves summary cards, generates a briefing, and gathers action
+    items plus urgent, high-priority, and response-needed stored cards.
+  - Provides `format_inbox_review()` for terminal-friendly reporting.
+  - Must remain an orchestrator over existing safe modules; do not add mailbox
+    mutation logic here.
+
 - `inbox_qa.py`
   - Answers questions over stored summary cards.
   - Uses deterministic rules by default.
   - Uses OpenAI only when `use_ai=True` or the CLI `--ai` flag is supplied.
 
 - `email_assistant.py`
-  - Customer-facing CLI wrapper with `fetch`, `list`, `actions`, `briefing`, `ask`,
-    `analyze`, and `doctor` subcommands.
+  - Customer-facing CLI wrapper with `review`, `fetch`, `list`, `actions`,
+    `briefing`, `ask`, `analyze`, and `doctor` subcommands.
   - Defaults to human-readable output and supports `--json`.
+  - The `review` command is the one-step customer workflow: fetch unread,
+    save summary cards, brief, and show action items.
   - The `list` command reads only from SQLite storage and must not call IMAP.
   - The `actions` command reads only from SQLite storage and must not call IMAP
     or OpenAI.
@@ -90,7 +104,9 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
 - `app.py`
   - Local Streamlit GUI for customer demos.
   - Reuses `doctor.py`, `fetch_imap.py`, `storage.py`, `daily_briefing.py`,
-    `inbox_qa.py`, `analyzer.py`, and `email_assistant.py` formatting helpers.
+    `review.py`, `inbox_qa.py`, `analyzer.py`, and `email_assistant.py`
+    formatting helpers.
+  - Includes an Inbox Review tab backed by `review.run_inbox_review()`.
   - Includes an Action Items tab backed by `storage.list_action_items()` and a
     standard-library CSV export helper.
   - Keeps backend behavior in the existing modules; the UI layer should stay
@@ -172,6 +188,14 @@ python email_assistant.py actions --priority urgent
 python email_assistant.py actions --json
 ```
 
+Run the one-click inbox review workflow:
+
+```bash
+python email_assistant.py review
+python email_assistant.py review --max-messages 10
+python email_assistant.py review --json
+```
+
 Run the local GUI:
 
 ```bash
@@ -231,12 +255,17 @@ For future development:
 - Do not mark emails as read.
 - Do not store raw email bodies.
 - Do not print secrets such as IMAP passwords or OpenAI API keys.
+- `review.py` and `email_assistant.py review` must use the existing read-only
+  fetch behavior in `fetch_imap.py`. They must not send, delete, archive, move,
+  or mark emails as read.
 - `doctor.py` must never fetch, select, search, modify, copy, delete, move, or
   mark email. Its IMAP check may only connect over SSL, login, and logout.
 - `email_assistant.py list` must read only from SQLite storage. It must not call
   IMAP or any mailbox-modifying code.
 - `email_assistant.py actions` and the GUI Action Items tab must read only from
   SQLite storage. They must not call IMAP, OpenAI, or any mailbox-modifying code.
+- The GUI Inbox Review tab must call `review.run_inbox_review()` and preserve
+  the same read-only safety constraints.
 - `app.py` must not add new mailbox behavior. It should call existing backend
   functions and preserve their read-only safety constraints.
 
@@ -254,8 +283,8 @@ added, should cover helper functions only and should not run real Streamlit
 browser sessions.
 
 Current test areas include analyzer behavior, read-only IMAP fetching, storage,
-daily briefing generation, Inbox Q&A, setup diagnostics, and the
-customer-facing CLI wrapper.
+daily briefing generation, Inbox Q&A, inbox review orchestration, setup
+diagnostics, and the customer-facing CLI wrapper.
 
 ## Suggested Future Improvements
 

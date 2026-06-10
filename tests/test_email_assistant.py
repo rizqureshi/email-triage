@@ -93,6 +93,22 @@ def make_action_item() -> dict[str, object]:
     }
 
 
+def make_review() -> dict[str, object]:
+    return {
+        "fetched_count": 1,
+        "saved_count": 1,
+        "briefing": make_briefing(),
+        "action_items": [make_action_item()],
+        "urgent_emails": [make_card()],
+        "high_priority_emails": [make_card()],
+        "response_needed_emails": [make_card()],
+        "safety_note": (
+            "Review fetched unread emails read-only, saved local summary cards, and did not "
+            "send, delete, archive, move, or mark any email as read."
+        ),
+    }
+
+
 def test_fetch_command_calls_fetch_imap_and_prints_human_output(monkeypatch, capsys) -> None:
     fetch_mock = Mock(return_value=[make_card()])
     save_mock = Mock()
@@ -324,6 +340,46 @@ def test_actions_no_items_found(monkeypatch, capsys) -> None:
     assert exit_code == 0
     assert "No stored action items found." in captured.out
     assert "No email was fetched or modified." in captured.out
+
+
+def test_review_command_prints_human_readable_output(monkeypatch, capsys) -> None:
+    review_mock = Mock(return_value=make_review())
+    monkeypatch.setattr(email_assistant.review, "run_inbox_review", review_mock)
+
+    exit_code = email_assistant.main(["review"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Inbox Review" in captured.out
+    assert "Fetched: 1" in captured.out
+    assert "Action items: 1" in captured.out
+    review_mock.assert_called_once_with(max_messages=10, mailbox="INBOX")
+
+
+def test_review_json_prints_valid_json(monkeypatch, capsys) -> None:
+    review_mock = Mock(return_value=make_review())
+    monkeypatch.setattr(email_assistant.review, "run_inbox_review", review_mock)
+
+    exit_code = email_assistant.main(["review", "--json"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    parsed = json.loads(captured.out)
+    assert parsed["fetched_count"] == 1
+    assert parsed["action_items"][0]["text"] == "Confirm payment status."
+
+
+def test_review_options_are_passed(monkeypatch, capsys) -> None:
+    review_mock = Mock(return_value=make_review())
+    monkeypatch.setattr(email_assistant.review, "run_inbox_review", review_mock)
+
+    exit_code = email_assistant.main(
+        ["review", "--max-messages", "7", "--mailbox", "Projects"]
+    )
+    capsys.readouterr()
+
+    assert exit_code == 0
+    review_mock.assert_called_once_with(max_messages=7, mailbox="Projects")
 
 
 def test_analyze_command_calls_analyzer(monkeypatch, capsys) -> None:

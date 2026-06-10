@@ -13,6 +13,7 @@ import daily_briefing
 import doctor
 import fetch_imap
 import inbox_qa
+import review
 import storage
 from config import load_imap_settings
 from triage import EmailMessage
@@ -209,6 +210,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _run_list(args)
         if args.command == "actions":
             return _run_actions(args)
+        if args.command == "review":
+            return _run_review(args)
     except ValueError as exc:
         _print_friendly_error(exc)
         return 2
@@ -308,6 +311,18 @@ def _run_actions(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_review(args: argparse.Namespace) -> int:
+    inbox_review = review.run_inbox_review(
+        max_messages=args.max_messages,
+        mailbox=args.mailbox,
+    )
+    if args.json:
+        print_json(inbox_review)
+    else:
+        print(review.format_inbox_review(inbox_review))
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Read-only email assistant for fetching, briefing, asking, and analyzing."
@@ -354,6 +369,13 @@ def _build_parser() -> argparse.ArgumentParser:
     actions_parser.add_argument("--owner", default=None)
     actions_parser.add_argument("--limit", type=int, default=50)
     actions_parser.add_argument("--json", action="store_true")
+
+    review_parser = subparsers.add_parser(
+        "review", help="Fetch, save, brief, and summarize action items in one step."
+    )
+    review_parser.add_argument("--max-messages", type=fetch_imap._parse_max_messages, default=10)
+    review_parser.add_argument("--mailbox", default="INBOX")
+    review_parser.add_argument("--json", action="store_true")
 
     return parser
 

@@ -16,6 +16,7 @@ import doctor
 import email_assistant
 import fetch_imap
 import inbox_qa
+import review
 import storage
 from config import load_imap_settings
 from triage import EmailMessage
@@ -46,6 +47,7 @@ def main() -> None:
             "Fetch Emails",
             "Summary Cards",
             "Action Items",
+            "Inbox Review",
             "Daily Briefing",
             "Ask Inbox",
             "Manual Analyze",
@@ -61,10 +63,12 @@ def main() -> None:
     with tabs[3]:
         _render_action_items()
     with tabs[4]:
-        _render_daily_briefing()
+        _render_inbox_review()
     with tabs[5]:
-        _render_ask_inbox()
+        _render_daily_briefing()
     with tabs[6]:
+        _render_ask_inbox()
+    with tabs[7]:
         _render_manual_analyze()
 
 
@@ -204,6 +208,32 @@ def _show_action_items(
     with st.expander("Source email details"):
         st.text(email_assistant.format_action_items(action_items))
     _json_expander(action_items)
+
+
+def _render_inbox_review() -> None:
+    st.subheader("Run Inbox Review")
+    max_messages = st.number_input(
+        "Review max messages", min_value=1, max_value=50, value=10, step=1
+    )
+    mailbox = st.text_input("Review mailbox", value="INBOX")
+
+    if st.button("Run inbox review"):
+        try:
+            inbox_review = review.run_inbox_review(
+                max_messages=int(max_messages),
+                mailbox=mailbox.strip() or "INBOX",
+            )
+        except Exception as exc:  # pragma: no cover - Streamlit error surface
+            _show_error(exc)
+            return
+
+        st.text(review.format_inbox_review(inbox_review))
+        action_items = inbox_review.get("action_items", [])
+        if isinstance(action_items, list) and action_items:
+            st.dataframe(action_items, use_container_width=True)
+        else:
+            st.info("No stored action items found.")
+        _json_expander(inbox_review)
 
 
 def _render_daily_briefing() -> None:
