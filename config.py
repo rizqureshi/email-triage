@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+import email_providers
+
 try:
     from dotenv import load_dotenv
 except ImportError:
@@ -39,6 +41,8 @@ class ImapSettings:
     password: str
     mailbox: str
     max_messages: int
+    provider_key: str = "custom"
+    provider_display_name: str = "Custom IMAP"
 
 
 def _get_int(name: str, default: int) -> int:
@@ -66,6 +70,13 @@ def _required_env(name: str) -> str:
     return value.strip()
 
 
+def _optional_env(name: str) -> str | None:
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return None
+    return value.strip()
+
+
 def load_settings() -> Settings:
     """Load settings from environment variables and .env."""
 
@@ -84,11 +95,19 @@ def load_settings() -> Settings:
 def load_imap_settings() -> ImapSettings:
     """Load read-only IMAP settings for fetch_imap.py."""
 
+    provider = email_providers.get_provider(os.getenv("EMAIL_PROVIDER", "icloud"))
+    host = _optional_env("IMAP_HOST") or provider.imap_host
+    if not host:
+        raise ValueError("IMAP_HOST is required for EMAIL_PROVIDER=custom")
+
     return ImapSettings(
-        host=_required_env("IMAP_HOST"),
-        port=_get_bounded_int("IMAP_PORT", 993, 1, 65535),
+        host=host,
+        port=_get_bounded_int("IMAP_PORT", provider.imap_port, 1, 65535),
         username=_required_env("IMAP_USERNAME"),
         password=_required_env("IMAP_PASSWORD"),
-        mailbox=os.getenv("IMAP_MAILBOX", "INBOX").strip() or "INBOX",
+        mailbox=os.getenv("IMAP_MAILBOX", provider.default_mailbox).strip()
+        or provider.default_mailbox,
         max_messages=_get_bounded_int("IMAP_MAX_MESSAGES", 5, 1, 50),
+        provider_key=provider.key,
+        provider_display_name=provider.display_name,
     )

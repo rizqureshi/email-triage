@@ -14,6 +14,7 @@ import analyzer
 import daily_briefing
 import doctor
 import email_assistant
+import email_providers
 import fetch_imap
 import inbox_qa
 import review
@@ -74,6 +75,7 @@ def main() -> None:
 
 def _render_setup_check() -> None:
     st.subheader("Setup Check")
+    _render_provider_help()
     skip_imap_login = st.checkbox("Skip IMAP login check", value=False)
 
     if st.button("Run setup check"):
@@ -85,6 +87,25 @@ def _render_setup_check() -> None:
 
         st.text(doctor.format_doctor_report(report))
         _json_expander(report)
+
+
+def _render_provider_help() -> None:
+    with st.expander("Provider Help", expanded=False):
+        st.caption(
+            "Provider is configured through EMAIL_PROVIDER in .env. "
+            "This section shows setup guidance only."
+        )
+        providers = email_providers.list_providers()
+        provider_labels = [provider.display_name for provider in providers]
+        selected_label = st.selectbox("Provider", provider_labels)
+        selected_provider = providers[provider_labels.index(str(selected_label))]
+        st.write(f"Key: `{selected_provider.key}`")
+        st.write(f"IMAP host: `{selected_provider.imap_host or '(custom)'}`")
+        st.write(f"IMAP port: `{selected_provider.imap_port}`")
+        st.write(f"Default mailbox: `{selected_provider.default_mailbox}`")
+        st.write(selected_provider.notes)
+        if selected_provider.oauth_may_be_needed_later:
+            st.info("OAuth may be needed later for some accounts. OAuth is not implemented yet.")
 
 
 def _render_fetch_emails() -> None:

@@ -10,6 +10,7 @@ from typing import Any
 
 import storage
 from config import ImapSettings, load_imap_settings, load_settings
+from email_providers import get_provider
 
 
 SAFETY_NOTE = "Doctor did not fetch, send, delete, archive, move, or mark any email as read."
@@ -73,11 +74,14 @@ def format_doctor_report(report: dict[str, object]) -> str:
     lines.extend(["", "IMAP:"])
     if imap.get("settings_loaded"):
         lines.append("✓ IMAP settings loaded")
+        lines.append(f"  Provider: {imap.get('provider_display_name')} ({imap.get('provider_key')})")
         lines.append(f"  Host: {imap.get('host')}")
         lines.append(f"  Port: {imap.get('port')}")
         lines.append(f"  Username: {imap.get('username')}")
         lines.append(f"  Mailbox: {imap.get('mailbox')}")
         lines.append(f"  Max messages: {imap.get('max_messages')}")
+        if imap.get("provider_notes"):
+            lines.append(f"  Setup notes: {imap.get('provider_notes')}")
     else:
         lines.append("! IMAP settings could not be loaded")
         lines.append(f"  Suggested fix: {imap.get('error') or 'check IMAP_* values in .env.'}")
@@ -126,6 +130,9 @@ def _check_openai() -> dict[str, object]:
 def _check_imap(skip_imap_login: bool) -> dict[str, object]:
     imap_report: dict[str, object] = {
         "settings_loaded": False,
+        "provider_key": None,
+        "provider_display_name": None,
+        "provider_notes": None,
         "host": None,
         "port": None,
         "username": None,
@@ -145,6 +152,9 @@ def _check_imap(skip_imap_login: bool) -> dict[str, object]:
     imap_report.update(
         {
             "settings_loaded": True,
+            "provider_key": settings.provider_key,
+            "provider_display_name": settings.provider_display_name,
+            "provider_notes": get_provider(settings.provider_key).notes,
             "host": settings.host,
             "port": settings.port,
             "username": settings.username,
@@ -203,6 +213,8 @@ def _section(report: dict[str, object], name: str) -> dict[str, Any]:
 
 def _friendly_imap_settings_error(exc: Exception) -> str:
     message = _sanitize_error(exc)
+    if "Unknown EMAIL_PROVIDER" in message:
+        return message
     if "IMAP_" in message and "required" in message:
         return f"{message}. Add it to .env."
     return f"{message}. Check your IMAP settings in .env."

@@ -43,6 +43,7 @@ cp .env.example .env
 
 Edit `.env` with your iCloud IMAP settings. For iCloud Mail, use:
 
+- `EMAIL_PROVIDER=icloud`
 - `IMAP_HOST=imap.mail.me.com`
 - Your full iCloud email address as `IMAP_USERNAME`
 - An Apple app-specific password as `IMAP_PASSWORD`
@@ -56,12 +57,70 @@ AI answers:
 OPENAI_API_KEY=your_key_here
 ```
 
+## Supported Providers
+
+MailTriage AI supports IMAP presets for:
+
+- iCloud Mail
+- Gmail
+- Outlook / Microsoft 365
+- Yahoo Mail
+- AOL Mail
+- Custom IMAP
+
+Start with iCloud or Gmail for easiest testing. Gmail may require enabling IMAP
+and using an app password. Outlook / Microsoft 365 may require OAuth later
+depending on the account or tenant policy. Custom IMAP can work for business
+mailboxes if the provider supports IMAP over SSL.
+
+List provider setup notes:
+
+```bash
+python email_assistant.py providers
+python email_assistant.py providers --json
+```
+
+Example iCloud setup:
+
+```bash
+EMAIL_PROVIDER=icloud
+IMAP_USERNAME=your_email@example.com
+IMAP_PASSWORD=your_app_password
+```
+
+Example Gmail setup:
+
+```bash
+EMAIL_PROVIDER=gmail
+IMAP_USERNAME=your_email@gmail.com
+IMAP_PASSWORD=your_google_app_password
+```
+
+Example Outlook setup:
+
+```bash
+EMAIL_PROVIDER=outlook
+IMAP_USERNAME=your_email@outlook.com
+IMAP_PASSWORD=your_password_or_app_password_if_supported
+```
+
+Example custom IMAP setup:
+
+```bash
+EMAIL_PROVIDER=custom
+IMAP_HOST=imap.example.com
+IMAP_PORT=993
+IMAP_USERNAME=you@example.com
+IMAP_PASSWORD=your_password_or_app_password
+```
+
 ## Recommended Usage
 
 Use `email_assistant.py` as the main command:
 
 ```bash
 python email_assistant.py doctor
+python email_assistant.py providers
 python email_assistant.py review
 python email_assistant.py fetch --max-messages 5 --save
 python email_assistant.py list --priority urgent

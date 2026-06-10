@@ -55,6 +55,7 @@ def clear_app_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in [
         "OPENAI_API_KEY",
         "OPENAI_MODEL",
+        "EMAIL_PROVIDER",
         "IMAP_HOST",
         "IMAP_PORT",
         "IMAP_USERNAME",
@@ -111,6 +112,7 @@ def test_missing_imap_settings_produces_friendly_error(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     clear_app_env(monkeypatch)
+    monkeypatch.setenv("EMAIL_PROVIDER", "custom")
     monkeypatch.chdir(tmp_path)
 
     report = doctor.run_doctor(skip_imap_login=True)
@@ -120,6 +122,43 @@ def test_missing_imap_settings_produces_friendly_error(
     assert "IMAP_HOST is required" in str(report["imap"]["error"])
     assert "Add it to .env." in str(report["imap"]["error"])
     assert "IMAP settings could not be loaded" in output
+
+
+def test_doctor_report_includes_provider_info_without_password(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    clear_app_env(monkeypatch)
+    monkeypatch.setenv("EMAIL_PROVIDER", "gmail")
+    monkeypatch.setenv("IMAP_USERNAME", "user@gmail.com")
+    monkeypatch.setenv("IMAP_PASSWORD", "secret-password")
+    monkeypatch.chdir(tmp_path)
+
+    report = doctor.run_doctor(skip_imap_login=True)
+    output = doctor.format_doctor_report(report)
+
+    assert report["imap"]["provider_key"] == "gmail"
+    assert report["imap"]["provider_display_name"] == "Gmail"
+    assert report["imap"]["host"] == "imap.gmail.com"
+    assert report["imap"]["port"] == 993
+    assert "Provider: Gmail (gmail)" in output
+    assert "Setup notes: Enable IMAP in Gmail settings" in output
+    assert "secret-password" not in output
+
+
+def test_doctor_unknown_provider_error_lists_valid_keys(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    clear_app_env(monkeypatch)
+    monkeypatch.setenv("EMAIL_PROVIDER", "fastmail")
+    monkeypatch.chdir(tmp_path)
+
+    report = doctor.run_doctor(skip_imap_login=True)
+    output = doctor.format_doctor_report(report)
+
+    assert report["imap"]["settings_loaded"] is False
+    assert "Unknown EMAIL_PROVIDER 'fastmail'" in str(report["imap"]["error"])
+    assert "icloud, gmail, outlook, yahoo, aol, custom" in str(report["imap"]["error"])
+    assert "Unknown EMAIL_PROVIDER 'fastmail'" in output
 
 
 def test_skip_imap_login_does_not_attempt_connection(
@@ -239,6 +278,9 @@ def test_human_command_contains_useful_checkmarks(monkeypatch: pytest.MonkeyPatc
         "openai": {"api_key_configured": True, "model": "gpt-4.1-mini", "error": None},
         "imap": {
             "settings_loaded": True,
+            "provider_key": "icloud",
+            "provider_display_name": "iCloud Mail",
+            "provider_notes": "Use an app password.",
             "host": "imap.mail.me.com",
             "port": 993,
             "username": "user@example.com",

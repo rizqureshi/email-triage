@@ -49,6 +49,55 @@ def test_load_imap_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.port == 993
     assert settings.mailbox == "INBOX"
     assert settings.max_messages == 5
+    assert settings.provider_key == "icloud"
+
+
+def test_load_imap_settings_uses_provider_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EMAIL_PROVIDER", "gmail")
+    monkeypatch.delenv("IMAP_HOST", raising=False)
+    monkeypatch.delenv("IMAP_PORT", raising=False)
+    monkeypatch.delenv("IMAP_MAILBOX", raising=False)
+    monkeypatch.setenv("IMAP_USERNAME", "user@gmail.com")
+    monkeypatch.setenv("IMAP_PASSWORD", "secret")
+
+    settings = load_imap_settings()
+
+    assert settings.provider_key == "gmail"
+    assert settings.provider_display_name == "Gmail"
+    assert settings.host == "imap.gmail.com"
+    assert settings.port == 993
+    assert settings.mailbox == "INBOX"
+
+
+def test_explicit_imap_host_overrides_provider_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EMAIL_PROVIDER", "gmail")
+    monkeypatch.setenv("IMAP_HOST", "imap.override.example.com")
+    monkeypatch.setenv("IMAP_USERNAME", "user@gmail.com")
+    monkeypatch.setenv("IMAP_PASSWORD", "secret")
+
+    settings = load_imap_settings()
+
+    assert settings.provider_key == "gmail"
+    assert settings.host == "imap.override.example.com"
+
+
+def test_custom_provider_requires_imap_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EMAIL_PROVIDER", "custom")
+    monkeypatch.delenv("IMAP_HOST", raising=False)
+    monkeypatch.setenv("IMAP_USERNAME", "user@example.com")
+    monkeypatch.setenv("IMAP_PASSWORD", "secret")
+
+    with pytest.raises(ValueError, match="IMAP_HOST is required for EMAIL_PROVIDER=custom"):
+        load_imap_settings()
+
+
+def test_unknown_provider_fails_with_valid_choices(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EMAIL_PROVIDER", "fastmail")
+    monkeypatch.setenv("IMAP_USERNAME", "user@example.com")
+    monkeypatch.setenv("IMAP_PASSWORD", "secret")
+
+    with pytest.raises(ValueError, match="Unknown EMAIL_PROVIDER 'fastmail'"):
+        load_imap_settings()
 
 
 @pytest.mark.parametrize("value", ["0", "65536", "not-a-number"])
@@ -77,10 +126,10 @@ def test_load_imap_settings_invalid_max_messages(
 
 def test_load_imap_settings_requires_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("IMAP_HOST", raising=False)
-    monkeypatch.setenv("IMAP_USERNAME", "user@example.com")
+    monkeypatch.delenv("IMAP_USERNAME", raising=False)
     monkeypatch.setenv("IMAP_PASSWORD", "secret")
 
-    with pytest.raises(ValueError, match="IMAP_HOST is required"):
+    with pytest.raises(ValueError, match="IMAP_USERNAME is required"):
         load_imap_settings()
 
 

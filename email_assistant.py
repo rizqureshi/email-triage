@@ -11,6 +11,7 @@ from typing import Sequence
 import analyzer
 import daily_briefing
 import doctor
+import email_providers
 import fetch_imap
 import inbox_qa
 import review
@@ -212,6 +213,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _run_actions(args)
         if args.command == "review":
             return _run_review(args)
+        if args.command == "providers":
+            return _run_providers(args)
     except ValueError as exc:
         _print_friendly_error(exc)
         return 2
@@ -323,6 +326,34 @@ def _run_review(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_providers(args: argparse.Namespace) -> int:
+    providers = [provider.to_dict() for provider in email_providers.list_providers()]
+    if args.json:
+        print_json(providers)
+    else:
+        print(format_providers(providers))
+    return 0
+
+
+def format_providers(providers: list[dict[str, object]]) -> str:
+    lines = ["Supported IMAP Providers", ""]
+    for provider in providers:
+        lines.extend(
+            [
+                f"- {provider.get('display_name')} ({provider.get('key')})",
+                f"  Host: {provider.get('imap_host') or '(custom)'}",
+                f"  Port: {provider.get('imap_port')}",
+                f"  Mailbox: {provider.get('default_mailbox')}",
+                f"  Notes: {provider.get('notes')}",
+            ]
+        )
+        if provider.get("oauth_may_be_needed_later"):
+            lines.append("  OAuth note: OAuth may be needed later for some accounts.")
+        lines.append("")
+    lines.append("No email was fetched or modified.")
+    return "\n".join(lines)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="MailTriage AI read-only CLI for fetching, briefing, asking, and analyzing."
@@ -376,6 +407,11 @@ def _build_parser() -> argparse.ArgumentParser:
     review_parser.add_argument("--max-messages", type=fetch_imap._parse_max_messages, default=10)
     review_parser.add_argument("--mailbox", default="INBOX")
     review_parser.add_argument("--json", action="store_true")
+
+    providers_parser = subparsers.add_parser(
+        "providers", help="List supported IMAP provider presets."
+    )
+    providers_parser.add_argument("--json", action="store_true")
 
     return parser
 

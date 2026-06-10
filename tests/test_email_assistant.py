@@ -382,6 +382,27 @@ def test_review_options_are_passed(monkeypatch, capsys) -> None:
     review_mock.assert_called_once_with(max_messages=7, mailbox="Projects")
 
 
+def test_providers_command_prints_supported_providers(capsys) -> None:
+    exit_code = email_assistant.main(["providers"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Supported IMAP Providers" in captured.out
+    assert "iCloud Mail (icloud)" in captured.out
+    assert "Gmail (gmail)" in captured.out
+    assert "No email was fetched or modified." in captured.out
+
+
+def test_providers_json_prints_valid_json(capsys) -> None:
+    exit_code = email_assistant.main(["providers", "--json"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    parsed = json.loads(captured.out)
+    assert parsed[0]["key"] == "icloud"
+    assert parsed[1]["imap_host"] == "imap.gmail.com"
+
+
 def test_analyze_command_calls_analyzer(monkeypatch, capsys) -> None:
     analyze_mock = Mock(return_value=make_analysis())
     monkeypatch.setattr(email_assistant.analyzer, "analyze_email", analyze_mock)

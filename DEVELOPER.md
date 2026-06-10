@@ -19,21 +19,24 @@ or send email.
 
 1. `fetch_imap.py` connects to IMAP, selects the mailbox with `readonly=True`,
    searches unread messages, and fetches message content with `BODY.PEEK[]`.
-2. Each fetched email is converted into a `triage.EmailMessage`.
-3. `analyzer.py` analyzes the email using OpenAI when configured, otherwise a
+2. `config.py` resolves IMAP settings using `EMAIL_PROVIDER` and provider
+   presets from `email_providers.py`, while preserving explicit `.env`
+   overrides.
+3. Each fetched email is converted into a `triage.EmailMessage`.
+4. `analyzer.py` analyzes the email using OpenAI when configured, otherwise a
    deterministic local fallback.
-4. `fetch_imap.py` combines message metadata and analysis into a compact summary
+5. `fetch_imap.py` combines message metadata and analysis into a compact summary
    card.
-5. `storage.py` optionally saves summary cards to SQLite.
-6. `review.py` orchestrates the one-step inbox review: fetch unread cards,
+6. `storage.py` optionally saves summary cards to SQLite.
+7. `review.py` orchestrates the one-step inbox review: fetch unread cards,
    save them, generate a briefing, list action items, and list urgent,
    high-priority, and response-needed stored cards.
-7. `daily_briefing.py` reads stored cards and builds a briefing.
-8. `inbox_qa.py` searches stored cards and answers inbox questions with
+8. `daily_briefing.py` reads stored cards and builds a briefing.
+9. `inbox_qa.py` searches stored cards and answers inbox questions with
    deterministic rules by default, or with OpenAI when explicitly requested.
-9. `doctor.py` checks local setup and IMAP login safety without fetching or
+10. `doctor.py` checks local setup and IMAP login safety without fetching or
    modifying mailbox data.
-10. `app.py` presents the same setup, fetch, browse, inbox review, briefing,
+11. `app.py` presents the same setup, fetch, browse, inbox review, briefing,
     Q&A, and manual analysis workflows in a local browser UI.
 
 Raw email bodies are used for immediate analysis but are not stored in SQLite.
@@ -43,8 +46,19 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
 - `config.py`
   - Loads `.env` values when `python-dotenv` is installed.
   - Defines OpenAI and IMAP settings.
+  - Resolves `EMAIL_PROVIDER`, defaulting to `icloud`.
+  - Uses provider defaults for `IMAP_HOST`, `IMAP_PORT`, and `IMAP_MAILBOX`
+    when those values are omitted.
+  - Keeps explicit `IMAP_HOST`, `IMAP_PORT`, and `IMAP_MAILBOX` overrides.
   - Validates bounded integer settings such as `MAX_DRAFT_WORDS`,
     `IMAP_PORT`, and `IMAP_MAX_MESSAGES`.
+
+- `email_providers.py`
+  - Defines provider presets for `icloud`, `gmail`, `outlook`, `yahoo`, `aol`,
+    and `custom`.
+  - Exposes `get_provider()`, `list_providers()`, and `provider_choices()`.
+  - Presets include display name, IMAP host/port, SSL flag, default mailbox,
+    setup notes, app-password guidance, and whether OAuth may be needed later.
 
 - `schemas.py`
   - Defines shared dataclasses such as `ActionItem` and `EmailAnalysis`.
@@ -116,8 +130,10 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
 
 - `doctor.py`
   - Builds the setup-check report for `python email_assistant.py doctor`.
-  - Checks `.env`, OpenAI configuration, IMAP settings, optional IMAP login, and
-    database/card count.
+  - Checks `.env`, OpenAI configuration, provider preset resolution, IMAP
+    settings, optional IMAP login, and database/card count.
+  - Reports selected provider key, display name, resolved host/port, username,
+    mailbox, and setup notes.
   - Must not print secrets such as `OPENAI_API_KEY` or `IMAP_PASSWORD`.
   - The IMAP login check is intentionally limited to SSL connect, `login`, and
     `logout`.
@@ -169,6 +185,13 @@ Check customer setup:
 python email_assistant.py doctor
 python email_assistant.py doctor --skip-imap-login
 python email_assistant.py doctor --json
+```
+
+List supported provider presets:
+
+```bash
+python email_assistant.py providers
+python email_assistant.py providers --json
 ```
 
 Browse stored summary cards:
@@ -243,6 +266,26 @@ No raw email bodies are stored.
 - If OpenAI is unavailable or output is unusable, the code falls back to local
   deterministic behavior.
 
+## Provider Presets
+
+`EMAIL_PROVIDER` defaults to `icloud`. Supported values are:
+
+- `icloud`
+- `gmail`
+- `outlook`
+- `yahoo`
+- `aol`
+- `custom`
+
+For known providers, `IMAP_HOST`, `IMAP_PORT`, and `IMAP_MAILBOX` can be
+omitted and the preset defaults are used. Explicit `.env` values still override
+the preset. For `EMAIL_PROVIDER=custom`, `IMAP_HOST` is required.
+
+Provider presets are IMAP-only. Gmail API OAuth and Microsoft Graph OAuth are
+deferred intentionally so this step can preserve the existing read-only IMAP
+behavior. Future OAuth work should be introduced as a separate provider/auth
+layer with explicit tests and safety review.
+
 ## Safety Constraints
 
 For future development:
@@ -255,6 +298,9 @@ For future development:
 - Do not mark emails as read.
 - Do not store raw email bodies.
 - Do not print secrets such as IMAP passwords or OpenAI API keys.
+- Provider presets must remain IMAP read-only presets. Do not add Gmail API
+  OAuth or Microsoft Graph OAuth in this layer.
+- Do not add SMTP for any provider preset.
 - `review.py` and `email_assistant.py review` must use the existing read-only
   fetch behavior in `fetch_imap.py`. They must not send, delete, archive, move,
   or mark emails as read.
