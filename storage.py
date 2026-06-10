@@ -143,6 +143,47 @@ def list_cards(
     return [_row_to_card(row) for row in rows]
 
 
+def list_action_items(
+    limit: int = 50,
+    priority: str | None = None,
+    owner: str | None = None,
+    due_date: str | None = None,
+    db_path: str | None = None,
+) -> list[dict[str, object]]:
+    """List action items flattened from stored summary cards."""
+
+    if limit <= 0:
+        return []
+
+    cards = _query_cards(db_path=db_path)
+    items: list[dict[str, object]] = []
+    owner_filter = owner.strip().lower() if isinstance(owner, str) and owner.strip() else None
+    due_date_filter = due_date.strip() if isinstance(due_date, str) and due_date.strip() else None
+
+    for card in cards:
+        action_items = card.get("action_items", [])
+        if not isinstance(action_items, list):
+            continue
+
+        for action_item in action_items:
+            if not isinstance(action_item, dict):
+                continue
+
+            item = _action_item_with_source(action_item, card)
+            if priority is not None and item["priority"] != priority:
+                continue
+            if owner_filter is not None and str(item["owner"]).lower() != owner_filter:
+                continue
+            if due_date_filter is not None and item["due_date"] != due_date_filter:
+                continue
+
+            items.append(item)
+            if len(items) >= limit:
+                return items
+
+    return items
+
+
 def list_recent_cards(limit: int = 20, db_path: str | None = None) -> list[dict[str, object]]:
     path = _resolve_db_path(db_path)
     if limit <= 0:
@@ -221,6 +262,42 @@ def _resolve_db_path(db_path: str | None) -> str:
         return env_path
 
     return DEFAULT_DB_PATH
+
+
+def _query_cards(db_path: str | None = None) -> list[dict[str, object]]:
+    path = _resolve_db_path(db_path)
+    if not Path(path).exists():
+        return []
+
+    with sqlite3.connect(path) as connection:
+        connection.row_factory = sqlite3.Row
+        table = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='email_cards'"
+        ).fetchone()
+        if table is None:
+            return []
+
+        rows = connection.execute(
+            """
+            SELECT
+                message_id,
+                sender,
+                subject,
+                summary,
+                sender_intent,
+                priority,
+                category,
+                requires_response,
+                action_items_json,
+                suggested_reply,
+                safety_note,
+                fetched_at
+            FROM email_cards
+            ORDER BY fetched_at DESC, message_id DESC
+            """
+        ).fetchall()
+
+    return [_row_to_card(row) for row in rows]
 
 
 def _ensure_parent_directory(path: str) -> None:
@@ -329,6 +406,25 @@ def _normalize_action_item(item: object) -> dict[str, Any]:
         "owner": "me",
         "due_date": None,
         "priority": "normal",
+    }
+
+
+def _action_item_with_source(
+    action_item: dict[str, object],
+    card: dict[str, object],
+) -> dict[str, object]:
+    normalized = _normalize_action_item(action_item)
+    return {
+        "text": normalized["text"],
+        "owner": normalized["owner"],
+        "due_date": normalized["due_date"],
+        "priority": normalized["priority"],
+        "message_id": card.get("message_id", ""),
+        "sender": card.get("sender", ""),
+        "subject": card.get("subject", ""),
+        "category": card.get("category", ""),
+        "requires_response": bool(card.get("requires_response")),
+        "fetched_at": card.get("fetched_at", ""),
     }
 
 

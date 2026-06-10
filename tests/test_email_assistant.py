@@ -78,6 +78,21 @@ def make_analysis() -> EmailAnalysis:
     )
 
 
+def make_action_item() -> dict[str, object]:
+    return {
+        "text": "Confirm payment status.",
+        "owner": "finance",
+        "due_date": "2026-06-05",
+        "priority": "urgent",
+        "message_id": "<1@example.com>",
+        "sender": "alex@example.com",
+        "subject": "Invoice question",
+        "category": "billing",
+        "requires_response": True,
+        "fetched_at": "2026-06-04T10:00:00Z",
+    }
+
+
 def test_fetch_command_calls_fetch_imap_and_prints_human_output(monkeypatch, capsys) -> None:
     fetch_mock = Mock(return_value=[make_card()])
     save_mock = Mock()
@@ -251,6 +266,63 @@ def test_list_no_cards_found(monkeypatch, capsys) -> None:
 
     assert exit_code == 0
     assert "No stored summary cards found." in captured.out
+    assert "No email was fetched or modified." in captured.out
+
+
+def test_actions_command_prints_human_readable_output(monkeypatch, capsys) -> None:
+    list_mock = Mock(return_value=[make_action_item()])
+    fetch_mock = Mock()
+    analyze_mock = Mock()
+    settings_mock = Mock()
+    monkeypatch.setattr(email_assistant.storage, "list_action_items", list_mock)
+    monkeypatch.setattr(email_assistant.fetch_imap, "fetch_inbox_summary_cards", fetch_mock)
+    monkeypatch.setattr(email_assistant.analyzer, "analyze_email", analyze_mock)
+    monkeypatch.setattr(email_assistant, "load_imap_settings", settings_mock)
+
+    exit_code = email_assistant.main(
+        ["actions", "--priority", "urgent", "--owner", "finance", "--limit", "10"]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Stored action items: 1" in captured.out
+    assert "Confirm payment status." in captured.out
+    assert "Owner: finance" in captured.out
+    assert "Source: Invoice question" in captured.out
+    list_mock.assert_called_once_with(limit=10, priority="urgent", owner="finance")
+    fetch_mock.assert_not_called()
+    analyze_mock.assert_not_called()
+    settings_mock.assert_not_called()
+
+
+def test_actions_json_prints_valid_json(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        email_assistant.storage,
+        "list_action_items",
+        Mock(return_value=[make_action_item()]),
+    )
+
+    exit_code = email_assistant.main(["actions", "--json"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    parsed = json.loads(captured.out)
+    assert parsed[0]["text"] == "Confirm payment status."
+    email_assistant.storage.list_action_items.assert_called_once_with(
+        limit=50,
+        priority=None,
+        owner=None,
+    )
+
+
+def test_actions_no_items_found(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(email_assistant.storage, "list_action_items", Mock(return_value=[]))
+
+    exit_code = email_assistant.main(["actions"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "No stored action items found." in captured.out
     assert "No email was fetched or modified." in captured.out
 
 

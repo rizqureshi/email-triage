@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import os
 from dataclasses import asdict, is_dataclass, replace
 from typing import Any
@@ -43,6 +45,7 @@ def main() -> None:
             "Setup Check",
             "Fetch Emails",
             "Summary Cards",
+            "Action Items",
             "Daily Briefing",
             "Ask Inbox",
             "Manual Analyze",
@@ -56,10 +59,12 @@ def main() -> None:
     with tabs[2]:
         _render_summary_cards()
     with tabs[3]:
-        _render_daily_briefing()
+        _render_action_items()
     with tabs[4]:
-        _render_ask_inbox()
+        _render_daily_briefing()
     with tabs[5]:
+        _render_ask_inbox()
+    with tabs[6]:
         _render_manual_analyze()
 
 
@@ -141,6 +146,66 @@ def _show_summary_cards(
     _json_expander(cards)
 
 
+def _render_action_items() -> None:
+    st.subheader("Action Items")
+    priority = st.selectbox("Action priority", PRIORITY_OPTIONS)
+    owner = st.text_input("Owner")
+    limit = st.number_input("Action item limit", min_value=1, max_value=500, value=50, step=1)
+
+    if st.button("Refresh action items"):
+        _show_action_items(
+            limit=int(limit),
+            priority=None if priority == "All" else str(priority),
+            owner=owner.strip() or None,
+        )
+
+
+def _show_action_items(
+    *,
+    limit: int,
+    priority: str | None,
+    owner: str | None,
+) -> None:
+    try:
+        action_items = storage.list_action_items(
+            limit=limit,
+            priority=priority,
+            owner=owner,
+        )
+    except Exception as exc:  # pragma: no cover - Streamlit error surface
+        _show_error(exc)
+        return
+
+    if action_items:
+        st.dataframe(
+            [
+                {
+                    "text": item.get("text"),
+                    "owner": item.get("owner"),
+                    "due_date": item.get("due_date"),
+                    "priority": item.get("priority"),
+                    "subject": item.get("subject"),
+                    "sender": item.get("sender"),
+                    "category": item.get("category"),
+                }
+                for item in action_items
+            ],
+            use_container_width=True,
+        )
+        st.download_button(
+            "Download CSV",
+            data=action_items_to_csv(action_items),
+            file_name="email_assistant_action_items.csv",
+            mime="text/csv",
+        )
+    else:
+        st.info("No stored action items found.")
+
+    with st.expander("Source email details"):
+        st.text(email_assistant.format_action_items(action_items))
+    _json_expander(action_items)
+
+
 def _render_daily_briefing() -> None:
     st.subheader("Daily Briefing")
     limit = st.number_input("Briefing limit", min_value=1, max_value=200, value=20, step=1)
@@ -208,6 +273,27 @@ def _render_manual_analyze() -> None:
 def _json_expander(data: object) -> None:
     with st.expander("JSON"):
         st.json(_jsonable(data))
+
+
+def action_items_to_csv(action_items: list[dict[str, object]]) -> str:
+    fieldnames = [
+        "text",
+        "owner",
+        "due_date",
+        "priority",
+        "message_id",
+        "sender",
+        "subject",
+        "category",
+        "requires_response",
+        "fetched_at",
+    ]
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    for item in action_items:
+        writer.writerow({field: item.get(field, "") for field in fieldnames})
+    return output.getvalue()
 
 
 def _jsonable(data: object) -> object:

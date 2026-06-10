@@ -16,6 +16,7 @@ def make_card(
     summary: str = "Needs attention.",
     priority: str = "high",
     category: str = "billing",
+    action_items: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     return {
         "message_id": message_id,
@@ -26,7 +27,9 @@ def make_card(
         "priority": priority,
         "category": category,
         "requires_response": requires_response,
-        "action_items": [
+        "action_items": action_items
+        if action_items is not None
+        else [
             {
                 "text": "Confirm payment status.",
                 "owner": "finance",
@@ -210,6 +213,74 @@ def test_list_cards_filters_requiring_response(tmp_path: Path) -> None:
 
     assert [card["message_id"] for card in cards] == ["<1@example.com>"]
     assert all(card["requires_response"] is True for card in cards)
+
+
+def test_list_action_items_returns_items_from_stored_cards(tmp_path: Path) -> None:
+    db_path = tmp_path / "email_triage.db"
+    storage.save_summary_card(
+        make_card(
+            message_id="<1@example.com>",
+            action_items=[
+                {
+                    "text": "Confirm payment status.",
+                    "owner": "finance",
+                    "due_date": "2026-06-05",
+                    "priority": "urgent",
+                },
+                {
+                    "text": "Send receipt.",
+                    "owner": "me",
+                    "due_date": None,
+                    "priority": "normal",
+                },
+            ],
+        ),
+        str(db_path),
+    )
+
+    items = storage.list_action_items(db_path=str(db_path))
+
+    assert [item["text"] for item in items] == ["Confirm payment status.", "Send receipt."]
+    assert items[0]["message_id"] == "<1@example.com>"
+    assert items[0]["sender"] == "alex@example.com"
+    assert items[0]["subject"] == "Invoice question"
+    assert items[0]["category"] == "billing"
+    assert items[0]["requires_response"] is True
+    assert items[0]["fetched_at"]
+
+
+def test_list_action_items_priority_filter_works(tmp_path: Path) -> None:
+    db_path = tmp_path / "email_triage.db"
+    storage.save_summary_card(
+        make_card(
+            action_items=[
+                {"text": "Handle now.", "owner": "me", "priority": "urgent"},
+                {"text": "Handle later.", "owner": "me", "priority": "normal"},
+            ],
+        ),
+        str(db_path),
+    )
+
+    items = storage.list_action_items(priority="urgent", db_path=str(db_path))
+
+    assert [item["text"] for item in items] == ["Handle now."]
+
+
+def test_list_action_items_owner_filter_works(tmp_path: Path) -> None:
+    db_path = tmp_path / "email_triage.db"
+    storage.save_summary_card(
+        make_card(
+            action_items=[
+                {"text": "Finance task.", "owner": "finance", "priority": "high"},
+                {"text": "My task.", "owner": "me", "priority": "high"},
+            ],
+        ),
+        str(db_path),
+    )
+
+    items = storage.list_action_items(owner="FINANCE", db_path=str(db_path))
+
+    assert [item["text"] for item in items] == ["Finance task."]
 
 
 def test_fetch_imap_save_behavior_uses_storage_and_still_prints_json(

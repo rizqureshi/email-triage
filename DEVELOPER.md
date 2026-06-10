@@ -68,6 +68,8 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
     without creating a missing database.
   - Exposes `list_cards()` for parameterized, filtered reads over stored
     summary cards.
+  - Exposes `list_action_items()` for flattened action-item reads from stored
+    summary cards only.
 
 - `daily_briefing.py`
   - Builds a briefing from stored summary cards only.
@@ -78,15 +80,19 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
   - Uses OpenAI only when `use_ai=True` or the CLI `--ai` flag is supplied.
 
 - `email_assistant.py`
-  - Customer-facing CLI wrapper with `fetch`, `list`, `briefing`, `ask`,
+  - Customer-facing CLI wrapper with `fetch`, `list`, `actions`, `briefing`, `ask`,
     `analyze`, and `doctor` subcommands.
   - Defaults to human-readable output and supports `--json`.
   - The `list` command reads only from SQLite storage and must not call IMAP.
+  - The `actions` command reads only from SQLite storage and must not call IMAP
+    or OpenAI.
 
 - `app.py`
   - Local Streamlit GUI for customer demos.
   - Reuses `doctor.py`, `fetch_imap.py`, `storage.py`, `daily_briefing.py`,
     `inbox_qa.py`, `analyzer.py`, and `email_assistant.py` formatting helpers.
+  - Includes an Action Items tab backed by `storage.list_action_items()` and a
+    standard-library CSV export helper.
   - Keeps backend behavior in the existing modules; the UI layer should stay
     thin and customer-friendly.
   - Must sanitize displayed errors and never show `OPENAI_API_KEY` or
@@ -158,6 +164,14 @@ python email_assistant.py list --category billing
 python email_assistant.py list --requires-response
 ```
 
+Browse stored action items:
+
+```bash
+python email_assistant.py actions
+python email_assistant.py actions --priority urgent
+python email_assistant.py actions --json
+```
+
 Run the local GUI:
 
 ```bash
@@ -221,6 +235,8 @@ For future development:
   mark email. Its IMAP check may only connect over SSL, login, and logout.
 - `email_assistant.py list` must read only from SQLite storage. It must not call
   IMAP or any mailbox-modifying code.
+- `email_assistant.py actions` and the GUI Action Items tab must read only from
+  SQLite storage. They must not call IMAP, OpenAI, or any mailbox-modifying code.
 - `app.py` must not add new mailbox behavior. It should call existing backend
   functions and preserve their read-only safety constraints.
 

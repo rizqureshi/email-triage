@@ -62,6 +62,7 @@ Use `email_assistant.py` as the main command:
 python email_assistant.py doctor
 python email_assistant.py fetch --max-messages 5 --save
 python email_assistant.py list --priority urgent
+python email_assistant.py actions
 python email_assistant.py briefing --limit 20
 python email_assistant.py ask "Catch me up"
 python email_assistant.py ask "What emails need my response?" --ai
@@ -83,6 +84,14 @@ python email_assistant.py list --priority urgent
 python email_assistant.py list --priority high --requires-response
 python email_assistant.py list --category billing
 python email_assistant.py list --requires-response
+```
+
+Browse saved action items without fetching mail:
+
+```bash
+python email_assistant.py actions
+python email_assistant.py actions --priority urgent
+python email_assistant.py actions --json
 ```
 
 ## Local GUI

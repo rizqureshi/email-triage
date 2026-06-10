@@ -69,6 +69,31 @@ def format_stored_cards(cards: list[dict[str, object]]) -> str:
     return "\n".join(lines)
 
 
+def format_action_items(action_items: list[dict[str, object]]) -> str:
+    if not action_items:
+        return "No stored action items found.\n\nNo email was fetched or modified."
+
+    lines = [f"Stored action items: {len(action_items)}", ""]
+    for index, item in enumerate(action_items, start=1):
+        due_date = item.get("due_date") or "none"
+        lines.extend(
+            [
+                f"{index}. {item.get('text') or '(no action text)'}",
+                f"   Owner: {item.get('owner') or 'me'}",
+                f"   Priority: {item.get('priority') or 'normal'}",
+                f"   Due date: {due_date}",
+                f"   Source: {item.get('subject') or '(no subject)'}",
+                f"   From: {item.get('sender') or '(unknown sender)'}",
+                f"   Category: {item.get('category') or 'other'}",
+                f"   Requires response: {_yes_no(item.get('requires_response'))}",
+            ]
+        )
+        lines.append("")
+
+    lines.append("No email was fetched or modified.")
+    return "\n".join(lines)
+
+
 def format_briefing(briefing: dict[str, object]) -> str:
     lines = [
         "Daily Briefing",
@@ -182,6 +207,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _run_doctor(args)
         if args.command == "list":
             return _run_list(args)
+        if args.command == "actions":
+            return _run_actions(args)
     except ValueError as exc:
         _print_friendly_error(exc)
         return 2
@@ -268,6 +295,19 @@ def _run_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_actions(args: argparse.Namespace) -> int:
+    action_items = storage.list_action_items(
+        limit=args.limit,
+        priority=args.priority,
+        owner=args.owner,
+    )
+    if args.json:
+        print_json(action_items)
+    else:
+        print(format_action_items(action_items))
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Read-only email assistant for fetching, briefing, asking, and analyzing."
@@ -308,6 +348,12 @@ def _build_parser() -> argparse.ArgumentParser:
     list_parser.add_argument("--requires-response", action="store_true")
     list_parser.add_argument("--limit", type=int, default=20)
     list_parser.add_argument("--json", action="store_true")
+
+    actions_parser = subparsers.add_parser("actions", help="Browse stored action items.")
+    actions_parser.add_argument("--priority", choices=PRIORITY_CHOICES)
+    actions_parser.add_argument("--owner", default=None)
+    actions_parser.add_argument("--limit", type=int, default=50)
+    actions_parser.add_argument("--json", action="store_true")
 
     return parser
 
