@@ -89,45 +89,87 @@ def test_busy_state_defaults_false_and_can_be_set(monkeypatch) -> None:
     assert state == {"busy_fetch": True}
 
 
-def test_run_with_busy_state_clears_state_after_success(monkeypatch) -> None:
+def test_request_action_sets_busy_and_pending(monkeypatch) -> None:
     state: dict[str, object] = {}
+    monkeypatch.setattr(app, "_session_state", lambda: state)
+
+    app._request_action("fetch")
+
+    assert state["busy_fetch"] is True
+    assert state["pending_fetch"] is True
+    assert app._is_busy("fetch") is True
+    assert app._has_pending_action("fetch") is True
+
+
+def test_request_action_while_busy_does_not_clear_pending(monkeypatch) -> None:
+    state: dict[str, object] = {
+        "busy_fetch": True,
+        "pending_fetch": True,
+        "result_fetch": ["existing"],
+    }
+    monkeypatch.setattr(app, "_session_state", lambda: state)
+
+    app._request_action("fetch")
+
+    assert state["busy_fetch"] is True
+    assert state["pending_fetch"] is True
+    assert state["result_fetch"] == ["existing"]
+
+
+def test_request_validated_action_stores_error_without_busy(monkeypatch) -> None:
+    state: dict[str, object] = {}
+    monkeypatch.setattr(app, "_session_state", lambda: state)
+
+    app._request_validated_action("ask", "Enter a question first.")
+
+    assert state == {"error_ask": "Enter a question first."}
+
+
+def test_execute_pending_action_stores_result_and_clears_state(monkeypatch) -> None:
+    state: dict[str, object] = {"busy_fetch": True, "pending_fetch": True}
+    callback = Mock(return_value=["card"])
+    rerun = Mock()
+    monkeypatch.setattr(app, "_session_state", lambda: state)
+    monkeypatch.setattr(app.st, "spinner", _fake_spinner)
+    monkeypatch.setattr(app.st, "rerun", rerun)
+
+    app._execute_pending_action("fetch", "Fetching...", callback)
+
+    callback.assert_called_once_with()
+    assert state["result_fetch"] == ["card"]
+    assert state["pending_fetch"] is False
+    assert state["busy_fetch"] is False
+    rerun.assert_called_once_with()
+
+
+def test_execute_pending_action_stores_safe_error_and_clears_state(monkeypatch) -> None:
+    state: dict[str, object] = {"busy_fetch": True, "pending_fetch": True}
+    callback = Mock(side_effect=RuntimeError("bad secret-password"))
+    rerun = Mock()
+    monkeypatch.setenv("IMAP_PASSWORD", "secret-password")
+    monkeypatch.setattr(app, "_session_state", lambda: state)
+    monkeypatch.setattr(app.st, "spinner", _fake_spinner)
+    monkeypatch.setattr(app.st, "rerun", rerun)
+
+    app._execute_pending_action("fetch", "Fetching...", callback)
+
+    callback.assert_called_once_with()
+    assert "secret-password" not in str(state["error_fetch"])
+    assert "[secret]" in str(state["error_fetch"])
+    assert state["pending_fetch"] is False
+    assert state["busy_fetch"] is False
+    rerun.assert_called_once_with()
+
+
+def test_execute_pending_action_does_not_run_without_pending(monkeypatch) -> None:
+    state: dict[str, object] = {"busy_fetch": True, "pending_fetch": False}
     callback = Mock()
     monkeypatch.setattr(app, "_session_state", lambda: state)
     monkeypatch.setattr(app.st, "spinner", _fake_spinner)
 
-    app._run_with_busy_state("fetch", "Fetching...", callback)
-
-    callback.assert_called_once_with()
-    assert state["busy_fetch"] is False
-
-
-def test_run_with_busy_state_clears_state_after_error(monkeypatch) -> None:
-    state: dict[str, object] = {}
-    callback = Mock(side_effect=RuntimeError("boom"))
-    monkeypatch.setattr(app, "_session_state", lambda: state)
-    monkeypatch.setattr(app.st, "spinner", _fake_spinner)
-
-    try:
-        app._run_with_busy_state("fetch", "Fetching...", callback)
-    except RuntimeError:
-        pass
-
-    callback.assert_called_once_with()
-    assert state["busy_fetch"] is False
-
-
-def test_run_with_busy_state_skips_callback_when_already_busy(monkeypatch) -> None:
-    state: dict[str, object] = {"busy_fetch": True}
-    callback = Mock()
-    warning = Mock()
-    monkeypatch.setattr(app, "_session_state", lambda: state)
-    monkeypatch.setattr(app.st, "warning", warning)
-    monkeypatch.setattr(app.st, "spinner", _fake_spinner)
-
-    app._run_with_busy_state("fetch", "Fetching...", callback)
+    app._execute_pending_action("fetch", "Fetching...", callback)
 
     callback.assert_not_called()
-    warning.assert_called_once_with("This action is already running.")
     assert state["busy_fetch"] is True
 
 

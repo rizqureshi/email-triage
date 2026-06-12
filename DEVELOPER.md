@@ -131,9 +131,10 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
     `IMAP_PASSWORD`.
   - Uses provider-specific authentication help when IMAP login fails, without
     connecting to IMAP from the error helper.
-  - Long-running buttons use busy-state helpers, disable the active action
-    while running, show a spinner/status message, and must clear state in a
-    `finally` block.
+  - Long-running buttons use the pending-action + busy-state pattern: button
+    `on_click` sets busy/pending before action execution, the next render shows
+    the button disabled, results/errors are stored in `st.session_state`, and
+    busy state is cleared in a `finally` block.
 
 - `doctor.py`
   - Builds the setup-check report for `python email_assistant.py doctor`.
