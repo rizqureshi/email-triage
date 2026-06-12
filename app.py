@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import os
+from collections.abc import Callable, MutableMapping
 from dataclasses import asdict, is_dataclass, replace
 from typing import Any
 
@@ -35,6 +36,35 @@ CATEGORY_OPTIONS = [
     "newsletter",
     "other",
 ]
+
+
+def _session_state() -> MutableMapping[str, object]:
+    return st.session_state
+
+
+def _busy_key(name: str) -> str:
+    return f"busy_{name}"
+
+
+def _is_busy(name: str) -> bool:
+    return bool(_session_state().get(_busy_key(name), False))
+
+
+def _set_busy(name: str, value: bool) -> None:
+    _session_state()[_busy_key(name)] = value
+
+
+def _run_with_busy_state(name: str, message: str, callback: Callable[[], None]) -> None:
+    if _is_busy(name):
+        st.warning("This action is already running.")
+        return
+
+    _set_busy(name, True)
+    try:
+        with st.spinner(message):
+            callback()
+    finally:
+        _set_busy(name, False)
 
 
 def main() -> None:
@@ -78,15 +108,19 @@ def _render_setup_check() -> None:
     _render_provider_help()
     skip_imap_login = st.checkbox("Skip IMAP login check", value=False)
 
-    if st.button("Run setup check"):
-        try:
-            report = doctor.run_doctor(skip_imap_login=skip_imap_login)
-        except Exception as exc:  # pragma: no cover - Streamlit error surface
-            _show_error(exc)
-            return
+    if st.button("Run setup check", disabled=_is_busy("setup_check")):
+        def run_setup_check() -> None:
+            try:
+                report = doctor.run_doctor(skip_imap_login=skip_imap_login)
+            except Exception as exc:  # pragma: no cover - Streamlit error surface
+                _show_error(exc)
+                return
 
-        st.text(doctor.format_doctor_report(report))
-        _json_expander(report)
+            st.text(doctor.format_doctor_report(report))
+            _json_expander(report)
+            st.success("Setup check complete.")
+
+        _run_with_busy_state("setup_check", "Checking setup...", run_setup_check)
 
 
 def _render_provider_help() -> None:
@@ -114,23 +148,31 @@ def _render_fetch_emails() -> None:
     mailbox = st.text_input("Mailbox", value="INBOX")
     save_cards = st.checkbox("Save summary cards to local database", value=False)
 
-    if st.button("Fetch unread emails"):
-        try:
-            settings = load_imap_settings()
-            settings = replace(
-                settings,
-                max_messages=int(max_messages),
-                mailbox=mailbox.strip() or "INBOX",
-            )
-            cards = fetch_imap.fetch_inbox_summary_cards(settings)
-            if save_cards:
-                storage.save_summary_cards(cards)
-        except Exception as exc:  # pragma: no cover - Streamlit error surface
-            _show_error(exc)
-            return
+    if st.button("Fetch unread emails", disabled=_is_busy("fetch_emails")):
+        def fetch_emails() -> None:
+            try:
+                settings = load_imap_settings()
+                settings = replace(
+                    settings,
+                    max_messages=int(max_messages),
+                    mailbox=mailbox.strip() or "INBOX",
+                )
+                cards = fetch_imap.fetch_inbox_summary_cards(settings)
+                if save_cards:
+                    storage.save_summary_cards(cards)
+            except Exception as exc:  # pragma: no cover - Streamlit error surface
+                _show_error(exc)
+                return
 
-        st.text(email_assistant.format_cards(cards))
-        _json_expander(cards)
+            st.text(email_assistant.format_cards(cards))
+            _json_expander(cards)
+            st.success("Fetch complete.")
+
+        _run_with_busy_state(
+            "fetch_emails",
+            "Fetching unread emails read-only...",
+            fetch_emails,
+        )
 
 
 def _render_summary_cards() -> None:
@@ -140,12 +182,16 @@ def _render_summary_cards() -> None:
     requires_response = st.checkbox("Requires response", value=False)
     limit = st.number_input("Limit", min_value=1, max_value=200, value=20, step=1)
 
-    if st.button("Refresh summary cards"):
-        _show_summary_cards(
-            limit=int(limit),
-            priority=None if priority == "All" else str(priority),
-            category=None if category == "All" else str(category),
-            requires_response=True if requires_response else None,
+    if st.button("Refresh summary cards", disabled=_is_busy("summary_cards")):
+        _run_with_busy_state(
+            "summary_cards",
+            "Loading stored summary cards...",
+            lambda: _show_summary_cards(
+                limit=int(limit),
+                priority=None if priority == "All" else str(priority),
+                category=None if category == "All" else str(category),
+                requires_response=True if requires_response else None,
+            ),
         )
 
 
@@ -169,6 +215,7 @@ def _show_summary_cards(
 
     st.text(email_assistant.format_stored_cards(cards))
     _json_expander(cards)
+    st.success("Summary cards loaded.")
 
 
 def _render_action_items() -> None:
@@ -177,11 +224,15 @@ def _render_action_items() -> None:
     owner = st.text_input("Owner")
     limit = st.number_input("Action item limit", min_value=1, max_value=500, value=50, step=1)
 
-    if st.button("Refresh action items"):
-        _show_action_items(
-            limit=int(limit),
-            priority=None if priority == "All" else str(priority),
-            owner=owner.strip() or None,
+    if st.button("Refresh action items", disabled=_is_busy("action_items")):
+        _run_with_busy_state(
+            "action_items",
+            "Loading stored action items...",
+            lambda: _show_action_items(
+                limit=int(limit),
+                priority=None if priority == "All" else str(priority),
+                owner=owner.strip() or None,
+            ),
         )
 
 
@@ -229,6 +280,7 @@ def _show_action_items(
     with st.expander("Source email details"):
         st.text(email_assistant.format_action_items(action_items))
     _json_expander(action_items)
+    st.success("Action items loaded.")
 
 
 def _render_inbox_review() -> None:
@@ -238,38 +290,54 @@ def _render_inbox_review() -> None:
     )
     mailbox = st.text_input("Review mailbox", value="INBOX")
 
-    if st.button("Run inbox review"):
-        try:
-            inbox_review = review.run_inbox_review(
-                max_messages=int(max_messages),
-                mailbox=mailbox.strip() or "INBOX",
-            )
-        except Exception as exc:  # pragma: no cover - Streamlit error surface
-            _show_error(exc)
-            return
+    if st.button("Run inbox review", disabled=_is_busy("inbox_review")):
+        def run_inbox_review() -> None:
+            try:
+                inbox_review = review.run_inbox_review(
+                    max_messages=int(max_messages),
+                    mailbox=mailbox.strip() or "INBOX",
+                )
+            except Exception as exc:  # pragma: no cover - Streamlit error surface
+                _show_error(exc)
+                return
 
-        st.text(review.format_inbox_review(inbox_review))
-        action_items = inbox_review.get("action_items", [])
-        if isinstance(action_items, list) and action_items:
-            st.dataframe(action_items, use_container_width=True)
-        else:
-            st.info("No stored action items found.")
-        _json_expander(inbox_review)
+            st.text(review.format_inbox_review(inbox_review))
+            action_items = inbox_review.get("action_items", [])
+            if isinstance(action_items, list) and action_items:
+                st.dataframe(action_items, use_container_width=True)
+            else:
+                st.info("No stored action items found.")
+            _json_expander(inbox_review)
+            st.success("Inbox review complete.")
+
+        _run_with_busy_state(
+            "inbox_review",
+            "Reviewing inbox read-only...",
+            run_inbox_review,
+        )
 
 
 def _render_daily_briefing() -> None:
     st.subheader("Daily Briefing")
     limit = st.number_input("Briefing limit", min_value=1, max_value=200, value=20, step=1)
 
-    if st.button("Generate briefing"):
-        try:
-            briefing = daily_briefing.generate_daily_briefing(limit=int(limit))
-        except Exception as exc:  # pragma: no cover - Streamlit error surface
-            _show_error(exc)
-            return
+    if st.button("Generate briefing", disabled=_is_busy("daily_briefing")):
+        def generate_briefing() -> None:
+            try:
+                briefing = daily_briefing.generate_daily_briefing(limit=int(limit))
+            except Exception as exc:  # pragma: no cover - Streamlit error surface
+                _show_error(exc)
+                return
 
-        st.text(email_assistant.format_briefing(briefing))
-        _json_expander(briefing)
+            st.text(email_assistant.format_briefing(briefing))
+            _json_expander(briefing)
+            st.success("Briefing generated.")
+
+        _run_with_busy_state(
+            "daily_briefing",
+            "Generating briefing from stored summary cards...",
+            generate_briefing,
+        )
 
 
 def _render_ask_inbox() -> None:
@@ -280,23 +348,32 @@ def _render_ask_inbox() -> None:
     if use_ai:
         st.caption("Only matched stored summary cards are sent to OpenAI, not raw email bodies.")
 
-    if st.button("Ask"):
+    if st.button("Ask", disabled=_is_busy("ask_inbox")):
         if not question.strip():
             st.error("Enter a question first.")
             return
 
-        try:
-            answer = inbox_qa.answer_inbox_question(
-                question.strip(),
-                limit=int(limit),
-                use_ai=use_ai,
-            )
-        except Exception as exc:  # pragma: no cover - Streamlit error surface
-            _show_error(exc)
-            return
+        def ask_inbox() -> None:
+            try:
+                answer = inbox_qa.answer_inbox_question(
+                    question.strip(),
+                    limit=int(limit),
+                    use_ai=use_ai,
+                )
+            except Exception as exc:  # pragma: no cover - Streamlit error surface
+                _show_error(exc)
+                return
 
-        st.text(email_assistant.format_answer(answer))
-        _json_expander(answer)
+            st.text(email_assistant.format_answer(answer))
+            _json_expander(answer)
+            st.success("Answer generated.")
+
+        message = (
+            "Searching stored summary cards and generating AI answer..."
+            if use_ai
+            else "Searching stored summary cards..."
+        )
+        _run_with_busy_state("ask_inbox", message, ask_inbox)
 
 
 def _render_manual_analyze() -> None:
@@ -305,20 +382,24 @@ def _render_manual_analyze() -> None:
     subject = st.text_input("Subject")
     body = st.text_area("Body", height=240)
 
-    if st.button("Analyze"):
+    if st.button("Analyze", disabled=_is_busy("manual_analyze")):
         if not body.strip():
             st.error("Paste an email body first.")
             return
 
-        try:
-            email = EmailMessage(sender=sender.strip(), subject=subject.strip(), body=body.strip())
-            analysis = analyzer.analyze_email(email)
-        except Exception as exc:  # pragma: no cover - Streamlit error surface
-            _show_error(exc)
-            return
+        def analyze_email() -> None:
+            try:
+                email = EmailMessage(sender=sender.strip(), subject=subject.strip(), body=body.strip())
+                analysis = analyzer.analyze_email(email)
+            except Exception as exc:  # pragma: no cover - Streamlit error surface
+                _show_error(exc)
+                return
 
-        st.text(email_assistant.format_analysis(analysis))
-        _json_expander(analysis)
+            st.text(email_assistant.format_analysis(analysis))
+            _json_expander(analysis)
+            st.success("Analysis complete.")
+
+        _run_with_busy_state("manual_analyze", "Analyzing pasted email...", analyze_email)
 
 
 def _json_expander(data: object) -> None:

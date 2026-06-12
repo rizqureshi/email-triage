@@ -49,6 +49,7 @@ def make_provider_settings(provider_key: str) -> ImapSettings:
 
 
 def test_load_imap_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("EMAIL_PROVIDER", raising=False)
     monkeypatch.setenv("IMAP_HOST", "imap.example.com")
     monkeypatch.setenv("IMAP_USERNAME", "user@example.com")
     monkeypatch.setenv("IMAP_PASSWORD", "secret")

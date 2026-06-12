@@ -1,5 +1,7 @@
 import csv
 import io
+from contextlib import contextmanager
+from unittest.mock import Mock
 
 import app
 
@@ -69,3 +71,66 @@ def test_safe_error_message_auth_fallback_is_generic(monkeypatch) -> None:
     assert message == (
         "IMAP authentication failed. Check your email provider's IMAP settings and credentials."
     )
+
+
+def test_busy_key_returns_expected_key() -> None:
+    assert app._busy_key("fetch") == "busy_fetch"
+
+
+def test_busy_state_defaults_false_and_can_be_set(monkeypatch) -> None:
+    state: dict[str, object] = {}
+    monkeypatch.setattr(app, "_session_state", lambda: state)
+
+    assert app._is_busy("fetch") is False
+
+    app._set_busy("fetch", True)
+
+    assert app._is_busy("fetch") is True
+    assert state == {"busy_fetch": True}
+
+
+def test_run_with_busy_state_clears_state_after_success(monkeypatch) -> None:
+    state: dict[str, object] = {}
+    callback = Mock()
+    monkeypatch.setattr(app, "_session_state", lambda: state)
+    monkeypatch.setattr(app.st, "spinner", _fake_spinner)
+
+    app._run_with_busy_state("fetch", "Fetching...", callback)
+
+    callback.assert_called_once_with()
+    assert state["busy_fetch"] is False
+
+
+def test_run_with_busy_state_clears_state_after_error(monkeypatch) -> None:
+    state: dict[str, object] = {}
+    callback = Mock(side_effect=RuntimeError("boom"))
+    monkeypatch.setattr(app, "_session_state", lambda: state)
+    monkeypatch.setattr(app.st, "spinner", _fake_spinner)
+
+    try:
+        app._run_with_busy_state("fetch", "Fetching...", callback)
+    except RuntimeError:
+        pass
+
+    callback.assert_called_once_with()
+    assert state["busy_fetch"] is False
+
+
+def test_run_with_busy_state_skips_callback_when_already_busy(monkeypatch) -> None:
+    state: dict[str, object] = {"busy_fetch": True}
+    callback = Mock()
+    warning = Mock()
+    monkeypatch.setattr(app, "_session_state", lambda: state)
+    monkeypatch.setattr(app.st, "warning", warning)
+    monkeypatch.setattr(app.st, "spinner", _fake_spinner)
+
+    app._run_with_busy_state("fetch", "Fetching...", callback)
+
+    callback.assert_not_called()
+    warning.assert_called_once_with("This action is already running.")
+    assert state["busy_fetch"] is True
+
+
+@contextmanager
+def _fake_spinner(message: str):
+    yield
