@@ -265,6 +265,33 @@ def test_fetch_unread_emails_uses_readonly_peek_and_recent_ids(
     assert [email.subject for _, email in emails] == ["Second", "Third"]
 
 
+def test_fetch_unread_emails_invalid_mailbox_error_includes_mailbox_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = Mock()
+    client.login.return_value = ("OK", [b"Logged in"])
+    client.select.return_value = ("NO", [b"No such mailbox"])
+    monkeypatch.setattr(fetch_imap.imaplib, "IMAP4_SSL", Mock(return_value=client))
+    monkeypatch.setattr(fetch_imap.ssl, "create_default_context", Mock(return_value=object()))
+    settings = make_settings()
+    settings = ImapSettings(
+        host=settings.host,
+        port=settings.port,
+        username=settings.username,
+        password=settings.password,
+        mailbox="Junk",
+        max_messages=settings.max_messages,
+    )
+
+    with pytest.raises(RuntimeError, match="Could not select mailbox 'Junk'"):
+        fetch_imap.fetch_unread_emails(settings)
+
+    client.select.assert_called_once_with("Junk", readonly=True)
+    client.search.assert_not_called()
+    client.fetch.assert_not_called()
+    client.logout.assert_called_once()
+
+
 def test_fetch_unread_emails_authentication_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

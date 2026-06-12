@@ -131,6 +131,18 @@ def test_fetch_command_calls_fetch_imap_and_prints_human_output(monkeypatch, cap
     save_mock.assert_called_once_with([make_card()])
 
 
+def test_fetch_mailbox_override_is_passed(monkeypatch, capsys) -> None:
+    fetch_mock = Mock(return_value=[])
+    monkeypatch.setattr(email_assistant, "load_imap_settings", Mock(return_value=make_settings()))
+    monkeypatch.setattr(email_assistant.fetch_imap, "fetch_inbox_summary_cards", fetch_mock)
+
+    exit_code = email_assistant.main(["fetch", "--mailbox", "Junk"])
+    capsys.readouterr()
+
+    assert exit_code == 0
+    assert fetch_mock.call_args.args[0].mailbox == "Junk"
+
+
 def test_fetch_json_prints_valid_json(monkeypatch, capsys) -> None:
     monkeypatch.setattr(email_assistant, "load_imap_settings", Mock(return_value=make_settings()))
     monkeypatch.setattr(
@@ -382,6 +394,17 @@ def test_review_options_are_passed(monkeypatch, capsys) -> None:
     review_mock.assert_called_once_with(max_messages=7, mailbox="Projects")
 
 
+def test_review_mailbox_override_is_passed(monkeypatch, capsys) -> None:
+    review_mock = Mock(return_value=make_review())
+    monkeypatch.setattr(email_assistant.review, "run_inbox_review", review_mock)
+
+    exit_code = email_assistant.main(["review", "--mailbox", "Junk"])
+    capsys.readouterr()
+
+    assert exit_code == 0
+    review_mock.assert_called_once_with(max_messages=10, mailbox="Junk")
+
+
 def test_providers_command_prints_supported_providers(capsys) -> None:
     exit_code = email_assistant.main(["providers"])
     captured = capsys.readouterr()
@@ -401,6 +424,26 @@ def test_providers_json_prints_valid_json(capsys) -> None:
     parsed = json.loads(captured.out)
     assert parsed[0]["key"] == "icloud"
     assert parsed[1]["imap_host"] == "imap.gmail.com"
+
+
+def test_mailboxes_command_prints_provider_presets(capsys) -> None:
+    exit_code = email_assistant.main(["mailboxes", "--provider", "gmail"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Suggested mailboxes for gmail" in captured.out
+    assert "[Gmail]/Spam" in captured.out
+    assert "No email was fetched or modified." in captured.out
+
+
+def test_mailboxes_json_prints_valid_json(capsys) -> None:
+    exit_code = email_assistant.main(["mailboxes", "--provider", "outlook", "--json"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    parsed = json.loads(captured.out)
+    assert parsed["provider"] == "outlook"
+    assert "Junk Email" in parsed["mailboxes"]
 
 
 def test_analyze_command_calls_analyzer(monkeypatch, capsys) -> None:

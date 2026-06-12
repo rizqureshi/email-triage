@@ -215,6 +215,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _run_review(args)
         if args.command == "providers":
             return _run_providers(args)
+        if args.command == "mailboxes":
+            return _run_mailboxes(args)
     except ValueError as exc:
         _print_friendly_error(exc)
         return 2
@@ -354,6 +356,37 @@ def format_providers(providers: list[dict[str, object]]) -> str:
     return "\n".join(lines)
 
 
+def _run_mailboxes(args: argparse.Namespace) -> int:
+    mailboxes = email_providers.mailbox_presets(args.provider)
+    data = {
+        "provider": args.provider,
+        "mailboxes": mailboxes,
+        "safety_note": "No email was fetched or modified.",
+    }
+    if args.json:
+        print_json(data)
+    else:
+        print(format_mailboxes(data))
+    return 0
+
+
+def format_mailboxes(data: dict[str, object]) -> str:
+    provider = str(data.get("provider") or "icloud")
+    lines = [f"Suggested mailboxes for {provider}:", ""]
+    mailboxes = data.get("mailboxes", [])
+    if isinstance(mailboxes, list):
+        for mailbox in mailboxes:
+            lines.append(f"- {mailbox}")
+    lines.extend(
+        [
+            "",
+            "Mailbox/folder names vary by provider. If a preset does not work, use the exact mailbox name shown by your email provider.",
+            str(data.get("safety_note") or "No email was fetched or modified."),
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="MailTriage AI read-only CLI for fetching, briefing, asking, and analyzing."
@@ -412,6 +445,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "providers", help="List supported IMAP provider presets."
     )
     providers_parser.add_argument("--json", action="store_true")
+
+    mailboxes_parser = subparsers.add_parser(
+        "mailboxes", help="List suggested mailbox names without connecting to IMAP."
+    )
+    mailboxes_parser.add_argument(
+        "--provider",
+        choices=email_providers.provider_choices(),
+        default="icloud",
+    )
+    mailboxes_parser.add_argument("--json", action="store_true")
 
     return parser
 

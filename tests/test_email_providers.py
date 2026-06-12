@@ -53,3 +53,23 @@ def test_authentication_help_returns_generic_message_for_unknown_provider() -> N
     assert email_providers.authentication_help("fastmail") == (
         "IMAP authentication failed. Check your email provider's IMAP settings and credentials."
     )
+
+
+def test_mailbox_presets_for_gmail_include_spam_and_sent() -> None:
+    presets = email_providers.mailbox_presets("gmail")
+
+    assert "[Gmail]/Spam" in presets
+    assert "[Gmail]/Sent Mail" in presets
+
+
+def test_mailbox_presets_for_outlook_include_junk_and_sent_items() -> None:
+    presets = email_providers.mailbox_presets("outlook")
+
+    assert "Junk Email" in presets
+    assert "Sent Items" in presets
+
+
+def test_mailbox_presets_for_unknown_provider_use_generic_presets() -> None:
+    presets = email_providers.mailbox_presets("fastmail")
+
+    assert presets == ["INBOX", "Junk", "Spam", "Sent", "Sent Items", "Archive", "Trash"]

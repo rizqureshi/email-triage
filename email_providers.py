@@ -123,6 +123,32 @@ def provider_choices() -> tuple[str, ...]:
     return ("icloud", "gmail", "outlook", "yahoo", "aol", "custom")
 
 
+def mailbox_presets(provider_key: str) -> list[str]:
+    key = (provider_key or "").strip().lower()
+    presets = {
+        "icloud": ["INBOX", "Junk", "Sent Messages", "Archive", "Trash"],
+        "gmail": [
+            "INBOX",
+            "[Gmail]/Spam",
+            "[Gmail]/Sent Mail",
+            "[Gmail]/All Mail",
+            "[Gmail]/Trash",
+        ],
+        "outlook": ["INBOX", "Junk Email", "Sent Items", "Archive", "Deleted Items"],
+        "yahoo": ["INBOX", "Bulk Mail", "Sent", "Archive", "Trash"],
+        "aol": ["INBOX", "Spam", "Sent", "Archive", "Trash"],
+        "custom": ["INBOX", "Junk", "Spam", "Sent", "Sent Items", "Archive", "Trash"],
+    }
+    return presets.get(key, presets["custom"])
+
+
+def default_mailbox(provider_key: str) -> str:
+    try:
+        return get_provider(provider_key).default_mailbox
+    except ValueError:
+        return "INBOX"
+
+
 def authentication_help(provider_key: str) -> str:
     key = (provider_key or "").strip().lower()
     messages = {

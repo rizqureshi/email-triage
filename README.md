@@ -153,6 +153,21 @@ python email_assistant.py review --json
 Inbox review fetches unread emails read-only, saves local summary cards,
 generates a briefing, and shows action items. It does not send or modify email.
 
+## Mailbox / Folder Selection
+
+The GUI offers provider-aware mailbox presets plus a custom mailbox override for
+Fetch Emails and Inbox Review. Folder names vary by provider. If a preset does
+not work, use the exact mailbox name shown by your email provider.
+
+CLI examples:
+
+```bash
+python email_assistant.py fetch --mailbox "Junk"
+python email_assistant.py review --mailbox "[Gmail]/Spam"
+python email_assistant.py fetch --mailbox "Sent Items"
+python email_assistant.py mailboxes --provider gmail
+```
+
 Browse saved summary cards without fetching mail:
 
 ```bash

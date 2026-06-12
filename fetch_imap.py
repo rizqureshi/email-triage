@@ -34,7 +34,10 @@ def fetch_unread_emails(settings: ImapSettings) -> list[tuple[str, EmailMessage]
             client.login(settings.username, settings.password)
         except imaplib.IMAP4.error as exc:
             raise RuntimeError(authentication_help(settings.provider_key)) from exc
-        _ensure_ok(client.select(settings.mailbox, readonly=True), "select mailbox")
+        _ensure_ok(
+            client.select(settings.mailbox, readonly=True),
+            _select_mailbox_error(settings.mailbox),
+        )
         search_status, search_data = client.search(None, "UNSEEN")
         _ensure_ok((search_status, search_data), "search unread messages")
 
@@ -246,6 +249,13 @@ def _ensure_ok(response: tuple[str, list[bytes] | list[tuple[bytes, bytes]]], ac
     status, _ = response
     if status != "OK":
         raise RuntimeError(f"Could not {action}: IMAP returned {status}")
+
+
+def _select_mailbox_error(mailbox: str) -> str:
+    return (
+        f"select mailbox '{mailbox}'. Folder names vary by provider. Try another preset "
+        "or type the exact mailbox name shown by your email provider."
+    )
 
 
 def _parse_args() -> argparse.Namespace:

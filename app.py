@@ -202,8 +202,9 @@ def _render_provider_help() -> None:
 
 def _render_fetch_emails() -> None:
     st.subheader("Fetch Emails")
+    provider_key = _selected_provider_key()
     max_messages = st.number_input("Max messages", min_value=1, max_value=50, value=5, step=1)
-    mailbox = st.text_input("Mailbox", value="INBOX")
+    mailbox_preset, custom_mailbox = _mailbox_inputs("fetch", provider_key)
     save_cards = st.checkbox("Save summary cards to local database", value=False)
 
     st.button(
@@ -215,7 +216,11 @@ def _render_fetch_emails() -> None:
     _execute_pending_action(
         "fetch_emails",
         "Fetching unread emails read-only...",
-        lambda: _fetch_email_cards(int(max_messages), mailbox, save_cards),
+        lambda: _fetch_email_cards(
+            int(max_messages),
+            _effective_mailbox(mailbox_preset, custom_mailbox),
+            save_cards,
+        ),
     )
     _render_action_state("fetch_emails", _render_fetch_result, "Fetch complete.")
 
@@ -332,10 +337,11 @@ def _render_action_items_result(result: object) -> None:
 
 def _render_inbox_review() -> None:
     st.subheader("Run Inbox Review")
+    provider_key = _selected_provider_key()
     max_messages = st.number_input(
         "Review max messages", min_value=1, max_value=50, value=10, step=1
     )
-    mailbox = st.text_input("Review mailbox", value="INBOX")
+    mailbox_preset, custom_mailbox = _mailbox_inputs("review", provider_key)
 
     st.button(
         "Run inbox review",
@@ -348,7 +354,7 @@ def _render_inbox_review() -> None:
         "Reviewing inbox read-only...",
         lambda: review.run_inbox_review(
             max_messages=int(max_messages),
-            mailbox=mailbox.strip() or "INBOX",
+            mailbox=_effective_mailbox(mailbox_preset, custom_mailbox),
         ),
     )
     _render_action_state("inbox_review", _render_inbox_review_result, "Inbox review complete.")
@@ -436,6 +442,48 @@ def _fetch_email_cards(max_messages: int, mailbox: str, save_cards: bool) -> lis
     if save_cards:
         storage.save_summary_cards(cards)
     return cards
+
+
+def _selected_provider_key() -> str:
+    try:
+        return load_imap_settings().provider_key
+    except Exception:
+        return os.getenv("EMAIL_PROVIDER", "icloud").strip().lower() or "icloud"
+
+
+def _mailbox_inputs(prefix: str, provider_key: str) -> tuple[str, str]:
+    presets = email_providers.mailbox_presets(provider_key)
+    selected = st.selectbox(
+        "Mailbox preset",
+        presets,
+        index=_mailbox_preset_index(presets, email_providers.default_mailbox(provider_key)),
+        key=f"{prefix}_mailbox_preset",
+    )
+    custom = st.text_input(
+        "Custom mailbox override",
+        value="",
+        key=f"{prefix}_custom_mailbox",
+        placeholder="Optional exact mailbox name",
+    )
+    st.caption(
+        "Folder names vary by provider. If the preset does not work, type the exact "
+        "mailbox name from your email provider."
+    )
+    return str(selected), custom
+
+
+def _mailbox_preset_index(presets: list[str], default: str) -> int:
+    try:
+        return presets.index(default)
+    except ValueError:
+        return 0
+
+
+def _effective_mailbox(selected_preset: str, custom_override: str) -> str:
+    custom = custom_override.strip()
+    if custom:
+        return custom
+    return selected_preset.strip() or "INBOX"
 
 
 def _render_doctor_result(result: object) -> None:

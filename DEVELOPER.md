@@ -59,6 +59,8 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
   - Exposes `get_provider()`, `list_providers()`, and `provider_choices()`.
   - Exposes `authentication_help()` for provider-specific IMAP authentication
     failure guidance.
+  - Exposes `mailbox_presets()` and `default_mailbox()` for provider-aware
+    mailbox/folder suggestions.
   - Presets include display name, IMAP host/port, SSL flag, default mailbox,
     setup notes, app-password guidance, and whether OAuth may be needed later.
 
@@ -79,6 +81,7 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
   - Fetches unread email via IMAP in read-only mode.
   - Uses `readonly=True`, `UNSEEN`, and `BODY.PEEK[]`.
   - Produces summary cards and can save them with `--save`.
+  - Includes the selected mailbox name in invalid mailbox/folder errors.
 
 - `storage.py`
   - Persists summary cards to local SQLite.
@@ -123,6 +126,9 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
     `review.py`, `inbox_qa.py`, `analyzer.py`, and `email_assistant.py`
     formatting helpers.
   - Includes an Inbox Review tab backed by `review.run_inbox_review()`.
+  - Fetch Emails and Inbox Review use provider-aware mailbox presets plus a
+    custom mailbox override. This only changes which mailbox is selected
+    read-only; it does not change mailbox safety behavior.
   - Includes an Action Items tab backed by `storage.list_action_items()` and a
     standard-library CSV export helper.
   - Keeps backend behavior in the existing modules; the UI layer should stay
@@ -298,6 +304,10 @@ Provider-specific authentication help lives in `email_providers.py`. `doctor.py`
 `fetch_imap.py`, and the Streamlit GUI use that helper so iCloud, Gmail,
 Outlook / Microsoft 365, Yahoo, AOL, and custom IMAP users see relevant
 guidance without exposing passwords.
+
+Mailbox/folder suggestions also live in `email_providers.py`. They are static
+presets only and do not connect to IMAP. Fetching still uses `readonly=True`
+mailbox selection and `BODY.PEEK[]` message fetches.
 
 ## Safety Constraints
 

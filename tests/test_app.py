@@ -173,6 +173,38 @@ def test_execute_pending_action_does_not_run_without_pending(monkeypatch) -> Non
     assert state["busy_fetch"] is True
 
 
+def test_effective_mailbox_uses_selected_preset_when_custom_is_empty() -> None:
+    assert app._effective_mailbox("[Gmail]/Spam", " ") == "[Gmail]/Spam"
+
+
+def test_effective_mailbox_custom_override_wins() -> None:
+    assert app._effective_mailbox("INBOX", "  Exact Folder  ") == "Exact Folder"
+
+
+def test_selected_provider_key_uses_env_when_settings_cannot_load(monkeypatch) -> None:
+    load_mock = Mock(side_effect=ValueError("missing credentials"))
+    monkeypatch.setenv("EMAIL_PROVIDER", "gmail")
+    monkeypatch.setattr(app, "load_imap_settings", load_mock)
+
+    assert app._selected_provider_key() == "gmail"
+    load_mock.assert_called_once_with()
+
+
+def test_mailbox_inputs_do_not_connect_to_imap(monkeypatch) -> None:
+    selectbox = Mock(return_value="[Gmail]/Spam")
+    text_input = Mock(return_value="")
+    monkeypatch.setattr(app.st, "selectbox", selectbox)
+    monkeypatch.setattr(app.st, "text_input", text_input)
+    monkeypatch.setattr(app.st, "caption", Mock())
+
+    selected, custom = app._mailbox_inputs("fetch", "gmail")
+
+    assert selected == "[Gmail]/Spam"
+    assert custom == ""
+    selectbox.assert_called_once()
+    text_input.assert_called_once()
+
+
 @contextmanager
 def _fake_spinner(message: str):
     yield
