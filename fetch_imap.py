@@ -34,10 +34,15 @@ def fetch_unread_emails(settings: ImapSettings) -> list[tuple[str, EmailMessage]
             client.login(settings.username, settings.password)
         except imaplib.IMAP4.error as exc:
             raise RuntimeError(authentication_help(settings.provider_key)) from exc
-        _ensure_ok(
-            client.select(settings.mailbox, readonly=True),
-            _select_mailbox_error(settings.mailbox),
-        )
+        selected_mailbox = _quote_mailbox_name(settings.mailbox)
+        try:
+            select_response = client.select(selected_mailbox, readonly=True)
+        except imaplib.IMAP4.error as exc:
+            raise RuntimeError(
+                f"Could not {_select_mailbox_error(settings.mailbox)} "
+                f"Original IMAP error: {exc}"
+            ) from exc
+        _ensure_ok(select_response, _select_mailbox_error(settings.mailbox))
         search_status, search_data = client.search(None, "UNSEEN")
         _ensure_ok((search_status, search_data), "search unread messages")
 
@@ -251,9 +256,20 @@ def _ensure_ok(response: tuple[str, list[bytes] | list[tuple[bytes, bytes]]], ac
         raise RuntimeError(f"Could not {action}: IMAP returned {status}")
 
 
+def _quote_mailbox_name(mailbox: str) -> str:
+    normalized = mailbox.strip() or "INBOX"
+    if normalized.startswith('"') and normalized.endswith('"'):
+        return normalized
+    if re.fullmatch(r"[A-Za-z0-9_.-]+", normalized):
+        return normalized
+    escaped = normalized.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
 def _select_mailbox_error(mailbox: str) -> str:
+    display_mailbox = mailbox.strip() or "INBOX"
     return (
-        f"select mailbox '{mailbox}'. Folder names vary by provider. Try another preset "
+        f"select mailbox '{display_mailbox}'. Folder names vary by provider. Try another preset "
         "or type the exact mailbox name shown by your email provider."
     )
 

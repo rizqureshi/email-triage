@@ -309,6 +309,11 @@ Mailbox/folder suggestions also live in `email_providers.py`. They are static
 presets only and do not connect to IMAP. Fetching still uses `readonly=True`
 mailbox selection and `BODY.PEEK[]` message fetches.
 
+`fetch_imap.py` safely quotes mailbox names only when calling IMAP `select`, so
+folders with spaces or IMAP-special characters work while user-facing mailbox
+values and error messages remain unquoted. This does not change read-only
+behavior.
+
 ## Safety Constraints
 
 For future development:

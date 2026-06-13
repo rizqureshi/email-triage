@@ -230,6 +230,23 @@ def test_summary_card_conversion_from_email_analysis() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("mailbox", "expected"),
+    [
+        ("INBOX", "INBOX"),
+        ("Junk", "Junk"),
+        ("Sent Messages", '"Sent Messages"'),
+        ("[Gmail]/Sent Mail", '"[Gmail]/Sent Mail"'),
+        ('"Sent Messages"', '"Sent Messages"'),
+        ('Folder "A"', '"Folder \\"A\\""'),
+        ("", "INBOX"),
+        ("  Sent Messages  ", '"Sent Messages"'),
+    ],
+)
+def test_quote_mailbox_name(mailbox: str, expected: str) -> None:
+    assert fetch_imap._quote_mailbox_name(mailbox) == expected
+
+
 def test_fetch_unread_emails_uses_readonly_peek_and_recent_ids(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -265,6 +282,36 @@ def test_fetch_unread_emails_uses_readonly_peek_and_recent_ids(
     assert [email.subject for _, email in emails] == ["Second", "Third"]
 
 
+def test_fetch_unread_emails_quotes_mailbox_names_with_spaces(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = Mock()
+    client.login.return_value = ("OK", [b"Logged in"])
+    client.select.return_value = ("OK", [b"0"])
+    client.search.return_value = ("OK", [b""])
+    monkeypatch.setattr(fetch_imap.imaplib, "IMAP4_SSL", Mock(return_value=client))
+    monkeypatch.setattr(fetch_imap.ssl, "create_default_context", Mock(return_value=object()))
+    settings = make_settings()
+    settings = ImapSettings(
+        host=settings.host,
+        port=settings.port,
+        username=settings.username,
+        password=settings.password,
+        mailbox="Sent Messages",
+        max_messages=settings.max_messages,
+    )
+
+    emails = fetch_imap.fetch_unread_emails(settings)
+
+    assert emails == []
+    client.select.assert_called_once_with('"Sent Messages"', readonly=True)
+    client.search.assert_called_once_with(None, "UNSEEN")
+    client.fetch.assert_not_called()
+    client.store.assert_not_called()
+    client.copy.assert_not_called()
+    client.logout.assert_called_once()
+
+
 def test_fetch_unread_emails_invalid_mailbox_error_includes_mailbox_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -289,6 +336,40 @@ def test_fetch_unread_emails_invalid_mailbox_error_includes_mailbox_name(
     client.select.assert_called_once_with("Junk", readonly=True)
     client.search.assert_not_called()
     client.fetch.assert_not_called()
+    client.logout.assert_called_once()
+
+
+def test_fetch_unread_emails_select_parse_error_is_friendly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = Mock()
+    client.login.return_value = ("OK", [b"Logged in"])
+    client.select.side_effect = fetch_imap.imaplib.IMAP4.error("BAD [b'Parse Error']")
+    monkeypatch.setattr(fetch_imap.imaplib, "IMAP4_SSL", Mock(return_value=client))
+    monkeypatch.setattr(fetch_imap.ssl, "create_default_context", Mock(return_value=object()))
+    settings = make_settings()
+    settings = ImapSettings(
+        host=settings.host,
+        port=settings.port,
+        username=settings.username,
+        password=settings.password,
+        mailbox="Sent Messages",
+        max_messages=settings.max_messages,
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        fetch_imap.fetch_unread_emails(settings)
+
+    message = str(exc_info.value)
+    assert "Could not select mailbox 'Sent Messages'" in message
+    assert "Folder names vary by provider" in message
+    assert "BAD [b'Parse Error']" in message
+    assert "secret" not in message
+    client.select.assert_called_once_with('"Sent Messages"', readonly=True)
+    client.search.assert_not_called()
+    client.fetch.assert_not_called()
+    client.store.assert_not_called()
+    client.copy.assert_not_called()
     client.logout.assert_called_once()
 
 

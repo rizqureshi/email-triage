@@ -159,6 +159,10 @@ The GUI offers provider-aware mailbox presets plus a custom mailbox override for
 Fetch Emails and Inbox Review. Folder names vary by provider. If a preset does
 not work, use the exact mailbox name shown by your email provider.
 
+Folders with spaces, such as `Sent Messages`, are supported. MailTriage AI
+safely quotes mailbox names internally while keeping the displayed folder name
+readable.
+
 CLI examples:
 
 ```bash
