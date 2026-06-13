@@ -242,11 +242,20 @@ def _raw_message_from_fetch(fetch_data: list[object]) -> bytes | None:
     return None
 
 
-def _recent_message_ids(search_data: list[bytes], max_messages: int) -> list[bytes]:
+def _recent_message_ids(search_data: list[object], max_messages: int) -> list[bytes]:
     if not search_data:
         return []
 
-    message_ids = search_data[0].split()
+    first = search_data[0]
+    if not first:
+        return []
+    if isinstance(first, bytes):
+        message_ids = first.split()
+    elif isinstance(first, str):
+        message_ids = first.encode().split()
+    else:
+        return []
+
     return message_ids[-max_messages:]
 
 

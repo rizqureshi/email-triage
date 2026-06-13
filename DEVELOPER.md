@@ -314,6 +314,10 @@ folders with spaces or IMAP-special characters work while user-facing mailbox
 values and error messages remain unquoted. This does not change read-only
 behavior.
 
+Empty IMAP search results, including `[None]`, are treated as no matching
+messages. This can happen in sent folders because MailTriage AI currently
+searches for `UNSEEN` messages only.
+
 ## Safety Constraints
 
 For future development:

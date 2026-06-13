@@ -247,6 +247,24 @@ def test_quote_mailbox_name(mailbox: str, expected: str) -> None:
     assert fetch_imap._quote_mailbox_name(mailbox) == expected
 
 
+@pytest.mark.parametrize(
+    ("search_data", "expected"),
+    [
+        ([], []),
+        ([None], []),
+        ([b""], []),
+        ([b" "], []),
+        ([b"1 2 3"], [b"2", b"3"]),
+        (["1 2 3"], [b"2", b"3"]),
+        ([object()], []),
+    ],
+)
+def test_recent_message_ids_handles_empty_and_malformed_search_results(
+    search_data: list[object], expected: list[bytes]
+) -> None:
+    assert fetch_imap._recent_message_ids(search_data, 2) == expected
+
+
 def test_fetch_unread_emails_uses_readonly_peek_and_recent_ids(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -306,6 +324,26 @@ def test_fetch_unread_emails_quotes_mailbox_names_with_spaces(
     assert emails == []
     client.select.assert_called_once_with('"Sent Messages"', readonly=True)
     client.search.assert_called_once_with(None, "UNSEEN")
+    client.fetch.assert_not_called()
+    client.store.assert_not_called()
+    client.copy.assert_not_called()
+    client.logout.assert_called_once()
+
+
+@pytest.mark.parametrize("search_data", [[None], [b""]])
+def test_fetch_unread_emails_empty_search_results_do_not_fetch(
+    monkeypatch: pytest.MonkeyPatch, search_data: list[object]
+) -> None:
+    client = Mock()
+    client.login.return_value = ("OK", [b"Logged in"])
+    client.select.return_value = ("OK", [b"0"])
+    client.search.return_value = ("OK", search_data)
+    monkeypatch.setattr(fetch_imap.imaplib, "IMAP4_SSL", Mock(return_value=client))
+    monkeypatch.setattr(fetch_imap.ssl, "create_default_context", Mock(return_value=object()))
+
+    emails = fetch_imap.fetch_unread_emails(make_settings())
+
+    assert emails == []
     client.fetch.assert_not_called()
     client.store.assert_not_called()
     client.copy.assert_not_called()
