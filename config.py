@@ -7,6 +7,10 @@ from dataclasses import dataclass
 
 import email_providers
 
+SEARCH_MODE_UNREAD = "unread"
+SEARCH_MODE_RECENT = "recent"
+SEARCH_MODE_CHOICES = (SEARCH_MODE_UNREAD, SEARCH_MODE_RECENT)
+
 try:
     from dotenv import load_dotenv
 except ImportError:
@@ -41,6 +45,7 @@ class ImapSettings:
     password: str
     mailbox: str
     max_messages: int
+    search_mode: str = SEARCH_MODE_UNREAD
     provider_key: str = "custom"
     provider_display_name: str = "Custom IMAP"
 
@@ -77,6 +82,20 @@ def _optional_env(name: str) -> str | None:
     return value.strip()
 
 
+def _get_search_mode(name: str = "IMAP_SEARCH_MODE") -> str:
+    value = os.getenv(name, SEARCH_MODE_UNREAD).strip().lower() or SEARCH_MODE_UNREAD
+    if value not in SEARCH_MODE_CHOICES:
+        choices = ", ".join(SEARCH_MODE_CHOICES)
+        raise ValueError(f"{name} must be one of: {choices}")
+    return value
+
+
+def search_mode_label(search_mode: str) -> str:
+    if search_mode == SEARCH_MODE_RECENT:
+        return "Recent messages"
+    return "Unread only"
+
+
 def load_settings() -> Settings:
     """Load settings from environment variables and .env."""
 
@@ -108,6 +127,7 @@ def load_imap_settings() -> ImapSettings:
         mailbox=os.getenv("IMAP_MAILBOX", provider.default_mailbox).strip()
         or provider.default_mailbox,
         max_messages=_get_bounded_int("IMAP_MAX_MESSAGES", 5, 1, 50),
+        search_mode=_get_search_mode(),
         provider_key=provider.key,
         provider_display_name=provider.display_name,
     )

@@ -163,9 +163,21 @@ Folders with spaces, such as `Sent Messages`, are supported. MailTriage AI
 safely quotes mailbox names internally while keeping the displayed folder name
 readable.
 
+Search modes:
+
+- `unread` fetches only unread messages.
+- `recent` fetches the most recent messages in the selected mailbox.
+
+Sent folders usually do not contain unread messages, so use `--search-mode recent`
+for Sent folders.
+
 CLI examples:
 
 ```bash
+python email_assistant.py fetch --mailbox "INBOX" --search-mode unread
+python email_assistant.py fetch --mailbox "Sent Messages" --search-mode recent
+python email_assistant.py review --mailbox "Sent Messages" --search-mode recent
+python email_assistant.py fetch --mailbox "[Gmail]/Sent Mail" --search-mode recent
 python email_assistant.py fetch --mailbox "Junk"
 python email_assistant.py review --mailbox "[Gmail]/Spam"
 python email_assistant.py fetch --mailbox "Sent Items"

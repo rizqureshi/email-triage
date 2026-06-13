@@ -94,16 +94,18 @@ def test_run_inbox_review_fetches_saves_and_builds_report(monkeypatch) -> None:
     monkeypatch.setattr(review.storage, "list_action_items", actions_mock)
     monkeypatch.setattr(review.storage, "list_cards", list_cards_mock)
 
-    result = review.run_inbox_review(max_messages=12, mailbox="Projects")
+    result = review.run_inbox_review(max_messages=12, mailbox="Projects", search_mode="recent")
 
     settings = fetch_mock.call_args.args[0]
     assert settings.max_messages == 12
     assert settings.mailbox == "Projects"
+    assert settings.search_mode == "recent"
     save_mock.assert_called_once_with(fetched_cards)
     briefing_mock.assert_called_once_with()
     actions_mock.assert_called_once_with()
     assert result["fetched_count"] == 1
     assert result["saved_count"] == 1
+    assert result["search_mode"] == "recent"
     assert result["briefing"] == make_briefing()
     assert result["action_items"] == action_items
     assert result["urgent_emails"] == urgent_cards
@@ -129,6 +131,7 @@ def test_run_inbox_review_defaults_blank_mailbox_to_inbox(monkeypatch) -> None:
 
     settings = fetch_mock.call_args.args[0]
     assert settings.mailbox == "INBOX"
+    assert settings.search_mode == "unread"
 
 
 def test_format_inbox_review_includes_counts_and_sections() -> None:
@@ -136,6 +139,7 @@ def test_format_inbox_review_includes_counts_and_sections() -> None:
         {
             "fetched_count": 1,
             "saved_count": 1,
+            "search_mode": "recent",
             "briefing": make_briefing(),
             "action_items": [make_action_item()],
             "urgent_emails": [make_card(priority="urgent")],
@@ -146,6 +150,7 @@ def test_format_inbox_review_includes_counts_and_sections() -> None:
     )
 
     assert "Inbox Review" in report
+    assert "Search mode: Recent messages" in report
     assert "Fetched: 1" in report
     assert "Urgent: 1" in report
     assert "High priority: 1" in report

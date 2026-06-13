@@ -97,7 +97,8 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
   - Builds a briefing from stored summary cards only.
 
 - `review.py`
-  - Provides `run_inbox_review(max_messages=10, mailbox="INBOX")`.
+  - Provides `run_inbox_review(max_messages=10, mailbox="INBOX",
+    search_mode="unread")`.
   - Loads IMAP settings, applies fetch overrides, calls the existing read-only
     fetch path, saves summary cards, generates a briefing, and gathers action
     items plus urgent, high-priority, and response-needed stored cards.
@@ -171,7 +172,7 @@ python analyzer.py --from "alex@example.com" --subject "Invoice question" \
   --body "Can you confirm whether invoice 1042 has been paid?"
 ```
 
-Fetch unread messages in read-only mode:
+Fetch messages in read-only mode:
 
 ```bash
 python fetch_imap.py --mailbox INBOX --max-messages 5
@@ -317,6 +318,11 @@ behavior.
 Empty IMAP search results, including `[None]`, are treated as no matching
 messages. This can happen in sent folders because MailTriage AI currently
 searches for `UNSEEN` messages only.
+
+IMAP search mode is carried on `ImapSettings.search_mode`. `unread` maps to
+IMAP `UNSEEN`; `recent` maps to IMAP `ALL` and then `_recent_message_ids()`
+limits the result to the most recent `max_messages` IDs. Both modes still use
+`readonly=True` mailbox selection and `BODY.PEEK[]` fetches.
 
 ## Safety Constraints
 

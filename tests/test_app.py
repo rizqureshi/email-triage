@@ -4,6 +4,18 @@ from contextlib import contextmanager
 from unittest.mock import Mock
 
 import app
+from config import ImapSettings
+
+
+def make_settings() -> ImapSettings:
+    return ImapSettings(
+        host="imap.example.com",
+        port=993,
+        username="user@example.com",
+        password="secret-password",
+        mailbox="INBOX",
+        max_messages=5,
+    )
 
 
 def test_action_items_to_csv() -> None:
@@ -203,6 +215,53 @@ def test_mailbox_inputs_do_not_connect_to_imap(monkeypatch) -> None:
     assert custom == ""
     selectbox.assert_called_once()
     text_input.assert_called_once()
+
+
+def test_search_mode_value_maps_unread_label() -> None:
+    assert app._search_mode_value("Unread only") == "unread"
+
+
+def test_search_mode_value_maps_recent_label() -> None:
+    assert app._search_mode_value("Recent messages") == "recent"
+
+
+def test_search_mode_input_returns_recent_value(monkeypatch) -> None:
+    selectbox = Mock(return_value="Recent messages")
+    monkeypatch.setattr(app.st, "selectbox", selectbox)
+
+    assert app._search_mode_input("fetch") == "recent"
+    selectbox.assert_called_once()
+
+
+def test_fetch_email_cards_passes_search_mode_to_settings(monkeypatch) -> None:
+    fetch_mock = Mock(return_value=[])
+    save_mock = Mock()
+    monkeypatch.setattr(app, "load_imap_settings", Mock(return_value=make_settings()))
+    monkeypatch.setattr(app.fetch_imap, "fetch_inbox_summary_cards", fetch_mock)
+    monkeypatch.setattr(app.storage, "save_summary_cards", save_mock)
+
+    result = app._fetch_email_cards(7, "Sent Messages", "recent", save_cards=True)
+
+    settings = fetch_mock.call_args.args[0]
+    assert settings.max_messages == 7
+    assert settings.mailbox == "Sent Messages"
+    assert settings.search_mode == "recent"
+    assert result == {"cards": [], "search_mode": "recent"}
+    save_mock.assert_called_once_with([])
+
+
+def test_run_inbox_review_passes_search_mode(monkeypatch) -> None:
+    review_mock = Mock(return_value={"search_mode": "recent"})
+    monkeypatch.setattr(app.review, "run_inbox_review", review_mock)
+
+    result = app._run_inbox_review(10, "Sent Messages", "recent")
+
+    assert result == {"search_mode": "recent"}
+    review_mock.assert_called_once_with(
+        max_messages=10,
+        mailbox="Sent Messages",
+        search_mode="recent",
+    )
 
 
 @contextmanager

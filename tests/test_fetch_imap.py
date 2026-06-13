@@ -56,12 +56,14 @@ def test_load_imap_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("IMAP_PORT", raising=False)
     monkeypatch.delenv("IMAP_MAILBOX", raising=False)
     monkeypatch.delenv("IMAP_MAX_MESSAGES", raising=False)
+    monkeypatch.delenv("IMAP_SEARCH_MODE", raising=False)
 
     settings = load_imap_settings()
 
     assert settings.port == 993
     assert settings.mailbox == "INBOX"
     assert settings.max_messages == 5
+    assert settings.search_mode == "unread"
     assert settings.provider_key == "icloud"
 
 
@@ -80,6 +82,29 @@ def test_load_imap_settings_uses_provider_defaults(monkeypatch: pytest.MonkeyPat
     assert settings.host == "imap.gmail.com"
     assert settings.port == 993
     assert settings.mailbox == "INBOX"
+
+
+def test_load_imap_settings_uses_recent_search_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EMAIL_PROVIDER", "gmail")
+    monkeypatch.setenv("IMAP_USERNAME", "user@gmail.com")
+    monkeypatch.setenv("IMAP_PASSWORD", "secret")
+    monkeypatch.setenv("IMAP_SEARCH_MODE", "recent")
+
+    settings = load_imap_settings()
+
+    assert settings.search_mode == "recent"
+
+
+def test_load_imap_settings_rejects_invalid_search_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("IMAP_HOST", "imap.example.com")
+    monkeypatch.setenv("IMAP_USERNAME", "user@example.com")
+    monkeypatch.setenv("IMAP_PASSWORD", "secret")
+    monkeypatch.setenv("IMAP_SEARCH_MODE", "everything")
+
+    with pytest.raises(ValueError, match="IMAP_SEARCH_MODE must be one of: unread, recent"):
+        load_imap_settings()
 
 
 def test_explicit_imap_host_overrides_provider_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -265,6 +290,14 @@ def test_recent_message_ids_handles_empty_and_malformed_search_results(
     assert fetch_imap._recent_message_ids(search_data, 2) == expected
 
 
+@pytest.mark.parametrize(
+    ("search_mode", "expected"),
+    [("unread", "UNSEEN"), ("recent", "ALL"), ("unknown", "UNSEEN")],
+)
+def test_search_criteria_for_mode(search_mode: str, expected: str) -> None:
+    assert fetch_imap._search_criteria_for_mode(search_mode) == expected
+
+
 def test_fetch_unread_emails_uses_readonly_peek_and_recent_ids(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -298,6 +331,41 @@ def test_fetch_unread_emails_uses_readonly_peek_and_recent_ids(
         "<3@example.com>",
     ]
     assert [email.subject for _, email in emails] == ["Second", "Third"]
+
+
+def test_fetch_unread_emails_recent_mode_uses_all_and_recent_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = Mock()
+    client.login.return_value = ("OK", [b"Logged in"])
+    client.select.return_value = ("OK", [b"4"])
+    client.search.return_value = ("OK", [b"1 2 3 4"])
+    client.fetch.side_effect = [
+        ("OK", [(b"3 (BODY[] {42}", make_raw_email(subject="Third", message_id="<3@example.com>"))]),
+        ("OK", [(b"4 (BODY[] {42}", make_raw_email(subject="Fourth", message_id="<4@example.com>"))]),
+    ]
+    monkeypatch.setattr(fetch_imap.imaplib, "IMAP4_SSL", Mock(return_value=client))
+    monkeypatch.setattr(fetch_imap.ssl, "create_default_context", Mock(return_value=object()))
+    settings = make_settings()
+    settings = ImapSettings(
+        host=settings.host,
+        port=settings.port,
+        username=settings.username,
+        password=settings.password,
+        mailbox=settings.mailbox,
+        max_messages=2,
+        search_mode="recent",
+    )
+
+    emails = fetch_imap.fetch_unread_emails(settings)
+
+    client.search.assert_called_once_with(None, "ALL")
+    assert client.fetch.call_args_list[0].args == (b"3", "(BODY.PEEK[])")
+    assert client.fetch.call_args_list[1].args == (b"4", "(BODY.PEEK[])")
+    client.store.assert_not_called()
+    client.copy.assert_not_called()
+    client.logout.assert_called_once()
+    assert [email.subject for _, email in emails] == ["Third", "Fourth"]
 
 
 def test_fetch_unread_emails_quotes_mailbox_names_with_spaces(

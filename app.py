@@ -20,7 +20,12 @@ import fetch_imap
 import inbox_qa
 import review
 import storage
-from config import load_imap_settings
+from config import (
+    SEARCH_MODE_RECENT,
+    SEARCH_MODE_UNREAD,
+    load_imap_settings,
+    search_mode_label,
+)
 from triage import EmailMessage
 
 
@@ -205,20 +210,27 @@ def _render_fetch_emails() -> None:
     provider_key = _selected_provider_key()
     max_messages = st.number_input("Max messages", min_value=1, max_value=50, value=5, step=1)
     mailbox_preset, custom_mailbox = _mailbox_inputs("fetch", provider_key)
+    search_mode = _search_mode_input("fetch")
     save_cards = st.checkbox("Save summary cards to local database", value=False)
 
     st.button(
-        "Fetch unread emails",
+        f"Fetch {search_mode_label(search_mode).lower()}",
         disabled=_is_busy("fetch_emails"),
         on_click=_request_action,
         args=("fetch_emails",),
     )
+    fetch_message = (
+        "Fetching recent messages read-only..."
+        if search_mode == SEARCH_MODE_RECENT
+        else "Fetching unread emails read-only..."
+    )
     _execute_pending_action(
         "fetch_emails",
-        "Fetching unread emails read-only...",
+        fetch_message,
         lambda: _fetch_email_cards(
             int(max_messages),
             _effective_mailbox(mailbox_preset, custom_mailbox),
+            search_mode,
             save_cards,
         ),
     )
@@ -342,6 +354,7 @@ def _render_inbox_review() -> None:
         "Review max messages", min_value=1, max_value=50, value=10, step=1
     )
     mailbox_preset, custom_mailbox = _mailbox_inputs("review", provider_key)
+    search_mode = _search_mode_input("review")
 
     st.button(
         "Run inbox review",
@@ -352,9 +365,10 @@ def _render_inbox_review() -> None:
     _execute_pending_action(
         "inbox_review",
         "Reviewing inbox read-only...",
-        lambda: review.run_inbox_review(
+        lambda: _run_inbox_review(
             max_messages=int(max_messages),
             mailbox=_effective_mailbox(mailbox_preset, custom_mailbox),
+            search_mode=search_mode,
         ),
     )
     _render_action_state("inbox_review", _render_inbox_review_result, "Inbox review complete.")
@@ -431,17 +445,28 @@ def _render_manual_analyze() -> None:
     _render_action_state("manual_analyze", _render_analysis_result, "Analysis complete.")
 
 
-def _fetch_email_cards(max_messages: int, mailbox: str, save_cards: bool) -> list[dict[str, object]]:
+def _fetch_email_cards(
+    max_messages: int, mailbox: str, search_mode: str, save_cards: bool
+) -> dict[str, object]:
     settings = load_imap_settings()
     settings = replace(
         settings,
         max_messages=max_messages,
         mailbox=mailbox.strip() or "INBOX",
+        search_mode=search_mode,
     )
     cards = fetch_imap.fetch_inbox_summary_cards(settings)
     if save_cards:
         storage.save_summary_cards(cards)
-    return cards
+    return {"cards": cards, "search_mode": settings.search_mode}
+
+
+def _run_inbox_review(max_messages: int, mailbox: str, search_mode: str) -> dict[str, object]:
+    return review.run_inbox_review(
+        max_messages=max_messages,
+        mailbox=mailbox,
+        search_mode=search_mode,
+    )
 
 
 def _selected_provider_key() -> str:
@@ -472,6 +497,18 @@ def _mailbox_inputs(prefix: str, provider_key: str) -> tuple[str, str]:
     return str(selected), custom
 
 
+def _search_mode_input(prefix: str) -> str:
+    labels = [search_mode_label(SEARCH_MODE_UNREAD), search_mode_label(SEARCH_MODE_RECENT)]
+    selected_label = st.selectbox("Search mode", labels, key=f"{prefix}_search_mode")
+    return _search_mode_value(str(selected_label))
+
+
+def _search_mode_value(label: str) -> str:
+    if label == search_mode_label(SEARCH_MODE_RECENT):
+        return SEARCH_MODE_RECENT
+    return SEARCH_MODE_UNREAD
+
+
 def _mailbox_preset_index(presets: list[str], default: str) -> int:
     try:
         return presets.index(default)
@@ -493,9 +530,16 @@ def _render_doctor_result(result: object) -> None:
 
 
 def _render_fetch_result(result: object) -> None:
-    cards = result if isinstance(result, list) else []
-    st.text(email_assistant.format_cards(cards))
-    _json_expander(cards)
+    if isinstance(result, dict):
+        cards = result.get("cards", [])
+        search_mode = str(result.get("search_mode") or SEARCH_MODE_UNREAD)
+    else:
+        cards = result if isinstance(result, list) else []
+        search_mode = SEARCH_MODE_UNREAD
+    if not isinstance(cards, list):
+        cards = []
+    st.text(email_assistant.format_cards(cards, search_mode))
+    _json_expander(result)
 
 
 def _render_summary_cards_result(result: object) -> None:

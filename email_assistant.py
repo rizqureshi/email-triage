@@ -16,7 +16,7 @@ import fetch_imap
 import inbox_qa
 import review
 import storage
-from config import load_imap_settings
+from config import SEARCH_MODE_CHOICES, SEARCH_MODE_UNREAD, load_imap_settings, search_mode_label
 from triage import EmailMessage
 
 
@@ -29,11 +29,17 @@ def print_json(data: object) -> None:
     print(json.dumps(_jsonable(data), indent=2))
 
 
-def format_cards(cards: list[dict[str, object]]) -> str:
+def format_cards(cards: list[dict[str, object]], search_mode: str = SEARCH_MODE_UNREAD) -> str:
     if not cards:
+        if search_mode == "recent":
+            return "No recent messages were found.\n\nNo email was sent or modified."
         return "No unread emails were found.\n\nNo email was sent or modified."
 
-    lines = [f"Fetched {len(cards)} summary card(s).", ""]
+    lines = [
+        f"Fetched {len(cards)} summary card(s).",
+        f"Search mode: {search_mode_label(search_mode)}",
+        "",
+    ]
     for index, card in enumerate(cards, start=1):
         lines.extend(
             [
@@ -234,6 +240,8 @@ def _run_fetch(args: argparse.Namespace) -> int:
         settings = replace(settings, max_messages=args.max_messages)
     if args.mailbox is not None:
         settings = replace(settings, mailbox=args.mailbox)
+    if args.search_mode is not None:
+        settings = replace(settings, search_mode=args.search_mode)
 
     cards = fetch_imap.fetch_inbox_summary_cards(settings)
     if args.save:
@@ -243,7 +251,7 @@ def _run_fetch(args: argparse.Namespace) -> int:
     if args.json:
         print_json(cards)
     else:
-        print(format_cards(cards))
+        print(format_cards(cards, settings.search_mode))
     return 0
 
 
@@ -320,6 +328,7 @@ def _run_review(args: argparse.Namespace) -> int:
     inbox_review = review.run_inbox_review(
         max_messages=args.max_messages,
         mailbox=args.mailbox,
+        search_mode=args.search_mode,
     )
     if args.json:
         print_json(inbox_review)
@@ -393,9 +402,10 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    fetch_parser = subparsers.add_parser("fetch", help="Fetch unread emails as summary cards.")
+    fetch_parser = subparsers.add_parser("fetch", help="Fetch emails as summary cards.")
     fetch_parser.add_argument("--max-messages", type=fetch_imap._parse_max_messages, default=None)
     fetch_parser.add_argument("--mailbox", default=None)
+    fetch_parser.add_argument("--search-mode", choices=SEARCH_MODE_CHOICES, default=None)
     fetch_parser.add_argument("--save", action="store_true")
     fetch_parser.add_argument("--json", action="store_true")
 
@@ -439,6 +449,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     review_parser.add_argument("--max-messages", type=fetch_imap._parse_max_messages, default=10)
     review_parser.add_argument("--mailbox", default="INBOX")
+    review_parser.add_argument("--search-mode", choices=SEARCH_MODE_CHOICES, default=SEARCH_MODE_UNREAD)
     review_parser.add_argument("--json", action="store_true")
 
     providers_parser = subparsers.add_parser(

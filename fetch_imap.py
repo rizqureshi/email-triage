@@ -16,7 +16,7 @@ from html import unescape
 from html.parser import HTMLParser
 
 from analyzer import analyze_email
-from config import ImapSettings, load_imap_settings
+from config import SEARCH_MODE_RECENT, SEARCH_MODE_UNREAD, ImapSettings, load_imap_settings
 from email_providers import authentication_help
 from schemas import EmailAnalysis
 import storage
@@ -24,7 +24,7 @@ from triage import EmailMessage
 
 
 def fetch_unread_emails(settings: ImapSettings) -> list[tuple[str, EmailMessage]]:
-    """Fetch unread emails using IMAP without modifying the mailbox."""
+    """Fetch emails using the configured search mode without modifying the mailbox."""
 
     emails: list[tuple[str, EmailMessage]] = []
     client = imaplib.IMAP4_SSL(settings.host, settings.port, ssl_context=ssl.create_default_context())
@@ -43,8 +43,9 @@ def fetch_unread_emails(settings: ImapSettings) -> list[tuple[str, EmailMessage]
                 f"Original IMAP error: {exc}"
             ) from exc
         _ensure_ok(select_response, _select_mailbox_error(settings.mailbox))
-        search_status, search_data = client.search(None, "UNSEEN")
-        _ensure_ok((search_status, search_data), "search unread messages")
+        criteria = _search_criteria_for_mode(settings.search_mode)
+        search_status, search_data = client.search(None, criteria)
+        _ensure_ok((search_status, search_data), f"search {settings.search_mode} messages")
 
         message_ids = _recent_message_ids(search_data, settings.max_messages)
         for message_id in message_ids:
@@ -66,7 +67,7 @@ def fetch_unread_emails(settings: ImapSettings) -> list[tuple[str, EmailMessage]
 
 
 def fetch_inbox_summary_cards(settings: ImapSettings | None = None) -> list[dict[str, object]]:
-    """Fetch unread emails and convert them into summary cards."""
+    """Fetch emails using the configured search mode and convert them into summary cards."""
 
     settings = settings or load_imap_settings()
     cards: list[dict[str, object]] = []
@@ -82,6 +83,12 @@ def triage_unread_emails(settings: ImapSettings | None = None) -> list[dict[str,
     """Backward-compatible alias for the inbox summary card output."""
 
     return fetch_inbox_summary_cards(settings)
+
+
+def fetch_emails(settings: ImapSettings) -> list[tuple[str, EmailMessage]]:
+    """Fetch emails using the configured search mode without modifying the mailbox."""
+
+    return fetch_unread_emails(settings)
 
 
 def _summary_card(message_id: str, email: EmailMessage, analysis: EmailAnalysis) -> dict[str, object]:
@@ -259,6 +266,14 @@ def _recent_message_ids(search_data: list[object], max_messages: int) -> list[by
     return message_ids[-max_messages:]
 
 
+def _search_criteria_for_mode(search_mode: str) -> str:
+    if search_mode == SEARCH_MODE_RECENT:
+        return "ALL"
+    if search_mode == SEARCH_MODE_UNREAD:
+        return "UNSEEN"
+    return "UNSEEN"
+
+
 def _ensure_ok(response: tuple[str, list[bytes] | list[tuple[bytes, bytes]]], action: str) -> None:
     status, _ = response
     if status != "OK":
@@ -285,7 +300,7 @@ def _select_mailbox_error(mailbox: str) -> str:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fetch unread emails over IMAP and print read-only summary cards."
+        description="Fetch emails over IMAP and print read-only summary cards."
     )
     parser.add_argument(
         "--max-messages",

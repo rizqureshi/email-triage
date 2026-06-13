@@ -97,13 +97,14 @@ def make_review() -> dict[str, object]:
     return {
         "fetched_count": 1,
         "saved_count": 1,
+        "search_mode": "unread",
         "briefing": make_briefing(),
         "action_items": [make_action_item()],
         "urgent_emails": [make_card()],
         "high_priority_emails": [make_card()],
         "response_needed_emails": [make_card()],
         "safety_note": (
-            "Review fetched unread emails read-only, saved local summary cards, and did not "
+            "Review fetched emails read-only, saved local summary cards, and did not "
             "send, delete, archive, move, or mark any email as read."
         ),
     }
@@ -127,6 +128,7 @@ def test_fetch_command_calls_fetch_imap_and_prints_human_output(monkeypatch, cap
     settings = fetch_mock.call_args.args[0]
     assert settings.max_messages == 3
     assert settings.mailbox == "Archive"
+    assert settings.search_mode == "unread"
     init_mock.assert_called_once_with()
     save_mock.assert_called_once_with([make_card()])
 
@@ -141,6 +143,19 @@ def test_fetch_mailbox_override_is_passed(monkeypatch, capsys) -> None:
 
     assert exit_code == 0
     assert fetch_mock.call_args.args[0].mailbox == "Junk"
+
+
+def test_fetch_search_mode_recent_is_passed(monkeypatch, capsys) -> None:
+    fetch_mock = Mock(return_value=[])
+    monkeypatch.setattr(email_assistant, "load_imap_settings", Mock(return_value=make_settings()))
+    monkeypatch.setattr(email_assistant.fetch_imap, "fetch_inbox_summary_cards", fetch_mock)
+
+    exit_code = email_assistant.main(["fetch", "--search-mode", "recent"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "No recent messages were found." in captured.out
+    assert fetch_mock.call_args.args[0].search_mode == "recent"
 
 
 def test_fetch_json_prints_valid_json(monkeypatch, capsys) -> None:
@@ -365,7 +380,7 @@ def test_review_command_prints_human_readable_output(monkeypatch, capsys) -> Non
     assert "Inbox Review" in captured.out
     assert "Fetched: 1" in captured.out
     assert "Action items: 1" in captured.out
-    review_mock.assert_called_once_with(max_messages=10, mailbox="INBOX")
+    review_mock.assert_called_once_with(max_messages=10, mailbox="INBOX", search_mode="unread")
 
 
 def test_review_json_prints_valid_json(monkeypatch, capsys) -> None:
@@ -391,7 +406,9 @@ def test_review_options_are_passed(monkeypatch, capsys) -> None:
     capsys.readouterr()
 
     assert exit_code == 0
-    review_mock.assert_called_once_with(max_messages=7, mailbox="Projects")
+    review_mock.assert_called_once_with(
+        max_messages=7, mailbox="Projects", search_mode="unread"
+    )
 
 
 def test_review_mailbox_override_is_passed(monkeypatch, capsys) -> None:
@@ -402,7 +419,28 @@ def test_review_mailbox_override_is_passed(monkeypatch, capsys) -> None:
     capsys.readouterr()
 
     assert exit_code == 0
-    review_mock.assert_called_once_with(max_messages=10, mailbox="Junk")
+    review_mock.assert_called_once_with(max_messages=10, mailbox="Junk", search_mode="unread")
+
+
+def test_review_search_mode_recent_is_passed(monkeypatch, capsys) -> None:
+    review_mock = Mock(return_value=make_review())
+    monkeypatch.setattr(email_assistant.review, "run_inbox_review", review_mock)
+
+    exit_code = email_assistant.main(["review", "--search-mode", "recent"])
+    capsys.readouterr()
+
+    assert exit_code == 0
+    review_mock.assert_called_once_with(max_messages=10, mailbox="INBOX", search_mode="recent")
+
+
+def test_fetch_invalid_search_mode_is_rejected(capsys) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        email_assistant.main(["fetch", "--search-mode", "everything"])
+
+    captured = capsys.readouterr()
+
+    assert exc_info.value.code == 2
+    assert "invalid choice" in captured.err
 
 
 def test_providers_command_prints_supported_providers(capsys) -> None:

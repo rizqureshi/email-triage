@@ -7,11 +7,11 @@ from dataclasses import replace
 import daily_briefing
 import fetch_imap
 import storage
-from config import load_imap_settings
+from config import SEARCH_MODE_UNREAD, load_imap_settings, search_mode_label
 
 
 SAFETY_NOTE = (
-    "Review fetched unread emails read-only, saved local summary cards, and did not "
+    "Review fetched emails read-only, saved local summary cards, and did not "
     "send, delete, archive, move, or mark any email as read."
 )
 
@@ -19,12 +19,14 @@ SAFETY_NOTE = (
 def run_inbox_review(
     max_messages: int = 10,
     mailbox: str = "INBOX",
+    search_mode: str = SEARCH_MODE_UNREAD,
 ) -> dict[str, object]:
     settings = load_imap_settings()
     settings = replace(
         settings,
         max_messages=max_messages,
         mailbox=mailbox.strip() or "INBOX",
+        search_mode=search_mode,
     )
 
     cards = fetch_imap.fetch_inbox_summary_cards(settings)
@@ -43,6 +45,7 @@ def run_inbox_review(
         "urgent_emails": urgent_emails,
         "high_priority_emails": high_priority_emails,
         "response_needed_emails": response_needed_emails,
+        "search_mode": settings.search_mode,
         "safety_note": SAFETY_NOTE,
     }
 
@@ -59,6 +62,7 @@ def format_inbox_review(review: dict[str, object]) -> str:
 
     lines = [
         "Inbox Review",
+        f"Search mode: {search_mode_label(str(review.get('search_mode') or SEARCH_MODE_UNREAD))}",
         f"Fetched: {review.get('fetched_count', 0)}",
         f"Saved: {review.get('saved_count', 0)}",
         f"Urgent: {len(urgent_emails)}",
