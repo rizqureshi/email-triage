@@ -16,6 +16,7 @@ import daily_briefing
 import doctor
 import email_assistant
 import email_providers
+import fetch_graph
 import fetch_imap
 import inbox_qa
 import review
@@ -25,6 +26,7 @@ from config import (
     SEARCH_MODE_UNREAD,
     load_imap_settings,
     search_mode_label,
+    use_graph_for_outlook,
 )
 from triage import EmailMessage
 
@@ -170,6 +172,7 @@ def main() -> None:
 def _render_setup_check() -> None:
     st.subheader("Setup Check")
     _render_provider_help()
+    _render_outlook_auth_mode()
     skip_imap_login = st.checkbox("Skip IMAP login check", value=False)
 
     st.button(
@@ -202,7 +205,22 @@ def _render_provider_help() -> None:
         st.write(f"Default mailbox: `{selected_provider.default_mailbox}`")
         st.write(selected_provider.notes)
         if selected_provider.oauth_may_be_needed_later:
-            st.info("OAuth may be needed later for some accounts. OAuth is not implemented yet.")
+            st.info("OAuth may be needed for some accounts. Outlook Graph mode supports terminal device-code login.")
+
+
+def _render_outlook_auth_mode() -> None:
+    provider = os.getenv("EMAIL_PROVIDER", "icloud").strip().lower()
+    auth_mode = os.getenv("OUTLOOK_AUTH_MODE", "imap").strip().lower() or "imap"
+    if provider != "outlook":
+        return
+
+    st.caption(f"Outlook auth mode: {auth_mode}")
+    if auth_mode == "graph":
+        if os.getenv("MS_GRAPH_CLIENT_ID", "").strip():
+            st.caption("Microsoft Graph client ID is configured.")
+        else:
+            st.warning("MS_GRAPH_CLIENT_ID is required for Outlook Graph mode.")
+        st.info("For first-time Microsoft login, run: python email_assistant.py graph-login")
 
 
 def _render_fetch_emails() -> None:
@@ -211,6 +229,8 @@ def _render_fetch_emails() -> None:
     max_messages = st.number_input("Max messages", min_value=1, max_value=50, value=5, step=1)
     mailbox_preset, custom_mailbox = _mailbox_inputs("fetch", provider_key)
     search_mode = _search_mode_input("fetch")
+    if use_graph_for_outlook():
+        st.caption("Outlook Graph mode uses Microsoft OAuth read-only mail access.")
     save_cards = st.checkbox("Save summary cards to local database", value=False)
 
     st.button(
@@ -355,6 +375,8 @@ def _render_inbox_review() -> None:
     )
     mailbox_preset, custom_mailbox = _mailbox_inputs("review", provider_key)
     search_mode = _search_mode_input("review")
+    if use_graph_for_outlook():
+        st.caption("Outlook Graph mode uses Microsoft OAuth read-only mail access.")
 
     st.button(
         "Run inbox review",
@@ -448,17 +470,27 @@ def _render_manual_analyze() -> None:
 def _fetch_email_cards(
     max_messages: int, mailbox: str, search_mode: str, save_cards: bool
 ) -> dict[str, object]:
-    settings = load_imap_settings()
-    settings = replace(
-        settings,
-        max_messages=max_messages,
-        mailbox=mailbox.strip() or "INBOX",
-        search_mode=search_mode,
-    )
-    cards = fetch_imap.fetch_inbox_summary_cards(settings)
+    selected_mailbox = mailbox.strip() or "INBOX"
+    if use_graph_for_outlook():
+        cards = fetch_graph.fetch_graph_summary_cards(
+            mailbox=selected_mailbox,
+            max_messages=max_messages,
+            search_mode=search_mode,
+        )
+        selected_search_mode = search_mode
+    else:
+        settings = load_imap_settings()
+        settings = replace(
+            settings,
+            max_messages=max_messages,
+            mailbox=selected_mailbox,
+            search_mode=search_mode,
+        )
+        cards = fetch_imap.fetch_inbox_summary_cards(settings)
+        selected_search_mode = settings.search_mode
     if save_cards:
         storage.save_summary_cards(cards)
-    return {"cards": cards, "search_mode": settings.search_mode}
+    return {"cards": cards, "search_mode": selected_search_mode}
 
 
 def _run_inbox_review(max_messages: int, mailbox: str, search_mode: str) -> dict[str, object]:

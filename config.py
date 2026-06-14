@@ -10,6 +10,9 @@ import email_providers
 SEARCH_MODE_UNREAD = "unread"
 SEARCH_MODE_RECENT = "recent"
 SEARCH_MODE_CHOICES = (SEARCH_MODE_UNREAD, SEARCH_MODE_RECENT)
+OUTLOOK_AUTH_MODE_IMAP = "imap"
+OUTLOOK_AUTH_MODE_GRAPH = "graph"
+OUTLOOK_AUTH_MODE_CHOICES = (OUTLOOK_AUTH_MODE_IMAP, OUTLOOK_AUTH_MODE_GRAPH)
 
 try:
     from dotenv import load_dotenv
@@ -90,10 +93,36 @@ def _get_search_mode(name: str = "IMAP_SEARCH_MODE") -> str:
     return value
 
 
+def outlook_auth_mode() -> str:
+    value = os.getenv("OUTLOOK_AUTH_MODE", OUTLOOK_AUTH_MODE_IMAP).strip().lower()
+    if value not in OUTLOOK_AUTH_MODE_CHOICES:
+        choices = ", ".join(OUTLOOK_AUTH_MODE_CHOICES)
+        raise ValueError(f"OUTLOOK_AUTH_MODE must be one of: {choices}")
+    return value
+
+
+def use_graph_for_outlook() -> bool:
+    provider = os.getenv("EMAIL_PROVIDER", "icloud").strip().lower()
+    return provider == "outlook" and outlook_auth_mode() == OUTLOOK_AUTH_MODE_GRAPH
+
+
 def search_mode_label(search_mode: str) -> str:
     if search_mode == SEARCH_MODE_RECENT:
         return "Recent messages"
     return "Unread only"
+
+
+def load_default_mailbox() -> str:
+    provider = email_providers.get_provider(os.getenv("EMAIL_PROVIDER", "icloud"))
+    return os.getenv("IMAP_MAILBOX", provider.default_mailbox).strip() or provider.default_mailbox
+
+
+def load_default_max_messages() -> int:
+    return _get_bounded_int("IMAP_MAX_MESSAGES", 5, 1, 50)
+
+
+def load_search_mode() -> str:
+    return _get_search_mode()
 
 
 def load_settings() -> Settings:
@@ -124,10 +153,9 @@ def load_imap_settings() -> ImapSettings:
         port=_get_bounded_int("IMAP_PORT", provider.imap_port, 1, 65535),
         username=_required_env("IMAP_USERNAME"),
         password=_required_env("IMAP_PASSWORD"),
-        mailbox=os.getenv("IMAP_MAILBOX", provider.default_mailbox).strip()
-        or provider.default_mailbox,
-        max_messages=_get_bounded_int("IMAP_MAX_MESSAGES", 5, 1, 50),
-        search_mode=_get_search_mode(),
+        mailbox=load_default_mailbox(),
+        max_messages=load_default_max_messages(),
+        search_mode=load_search_mode(),
         provider_key=provider.key,
         provider_display_name=provider.display_name,
     )

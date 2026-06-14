@@ -12,11 +12,22 @@ import analyzer
 import daily_briefing
 import doctor
 import email_providers
+import fetch_graph
 import fetch_imap
+import graph_auth
 import inbox_qa
 import review
 import storage
-from config import SEARCH_MODE_CHOICES, SEARCH_MODE_UNREAD, load_imap_settings, search_mode_label
+from config import (
+    SEARCH_MODE_CHOICES,
+    SEARCH_MODE_UNREAD,
+    load_default_mailbox,
+    load_default_max_messages,
+    load_imap_settings,
+    load_search_mode,
+    search_mode_label,
+    use_graph_for_outlook,
+)
 from triage import EmailMessage
 
 
@@ -213,6 +224,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _run_analyze(args)
         if args.command == "doctor":
             return _run_doctor(args)
+        if args.command == "graph-login":
+            return _run_graph_login(args)
         if args.command == "list":
             return _run_list(args)
         if args.command == "actions":
@@ -235,15 +248,26 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _run_fetch(args: argparse.Namespace) -> int:
-    settings = load_imap_settings()
-    if args.max_messages is not None:
-        settings = replace(settings, max_messages=args.max_messages)
-    if args.mailbox is not None:
-        settings = replace(settings, mailbox=args.mailbox)
-    if args.search_mode is not None:
-        settings = replace(settings, search_mode=args.search_mode)
+    if use_graph_for_outlook():
+        mailbox = args.mailbox if args.mailbox is not None else load_default_mailbox()
+        max_messages = args.max_messages if args.max_messages is not None else load_default_max_messages()
+        search_mode = args.search_mode if args.search_mode is not None else load_search_mode()
+        cards = fetch_graph.fetch_graph_summary_cards(
+            mailbox=mailbox,
+            max_messages=max_messages,
+            search_mode=search_mode,
+        )
+    else:
+        settings = load_imap_settings()
+        if args.max_messages is not None:
+            settings = replace(settings, max_messages=args.max_messages)
+        if args.mailbox is not None:
+            settings = replace(settings, mailbox=args.mailbox)
+        if args.search_mode is not None:
+            settings = replace(settings, search_mode=args.search_mode)
+        cards = fetch_imap.fetch_inbox_summary_cards(settings)
+        search_mode = settings.search_mode
 
-    cards = fetch_imap.fetch_inbox_summary_cards(settings)
     if args.save:
         storage.init_db()
         storage.save_summary_cards(cards)
@@ -251,7 +275,7 @@ def _run_fetch(args: argparse.Namespace) -> int:
     if args.json:
         print_json(cards)
     else:
-        print(format_cards(cards, settings.search_mode))
+        print(format_cards(cards, search_mode))
     return 0
 
 
@@ -294,6 +318,12 @@ def _run_doctor(args: argparse.Namespace) -> int:
         print_json(report)
     else:
         print(doctor.format_doctor_report(report))
+    return 0
+
+
+def _run_graph_login(args: argparse.Namespace) -> int:
+    graph_auth.get_graph_access_token()
+    print("Microsoft Graph login succeeded. No email was fetched or modified.")
     return 0
 
 
@@ -430,6 +460,11 @@ def _build_parser() -> argparse.ArgumentParser:
     doctor_parser = subparsers.add_parser("doctor", help="Check local setup without touching email.")
     doctor_parser.add_argument("--json", action="store_true")
     doctor_parser.add_argument("--skip-imap-login", action="store_true")
+
+    subparsers.add_parser(
+        "graph-login",
+        help="Sign in to Microsoft Graph with device-code flow without fetching email.",
+    )
 
     list_parser = subparsers.add_parser("list", help="Browse stored summary cards.")
     list_parser.add_argument("--priority", choices=PRIORITY_CHOICES)

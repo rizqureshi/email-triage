@@ -69,9 +69,10 @@ MailTriage AI supports IMAP presets for:
 - Custom IMAP
 
 Start with iCloud or Gmail for easiest testing. Gmail may require enabling IMAP
-and using an app password. Outlook / Microsoft 365 may require OAuth later
-depending on the account or tenant policy. Custom IMAP can work for business
-mailboxes if the provider supports IMAP over SSL.
+and using an app password. Outlook / Microsoft 365 can use IMAP when the account
+allows it, or Microsoft Graph OAuth read-only mail access when modern
+authentication is required. Custom IMAP can work for business mailboxes if the
+provider supports IMAP over SSL.
 
 List provider setup notes:
 
@@ -107,6 +108,25 @@ IMAP_USERNAME=your_email@outlook.com
 IMAP_PASSWORD=your_password_or_app_password_if_supported
 ```
 
+Example Outlook Graph setup:
+
+```bash
+EMAIL_PROVIDER=outlook
+OUTLOOK_AUTH_MODE=graph
+MS_GRAPH_CLIENT_ID=your_application_client_id_here
+MS_GRAPH_TENANT=consumers
+MS_GRAPH_SCOPES=User.Read Mail.Read offline_access
+```
+
+Then sign in once from a terminal:
+
+```bash
+python email_assistant.py graph-login
+```
+
+Graph mode uses delegated Microsoft OAuth and read-only `Mail.Read`. It does
+not send or modify email.
+
 Example custom IMAP setup:
 
 ```bash
@@ -124,6 +144,7 @@ Use `email_assistant.py` as the main command:
 ```bash
 python email_assistant.py doctor
 python email_assistant.py providers
+python email_assistant.py graph-login
 python email_assistant.py review
 python email_assistant.py fetch --max-messages 5 --save
 python email_assistant.py list --priority urgent

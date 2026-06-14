@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 
 import fetch_imap
-from config import ImapSettings, load_imap_settings
+from config import ImapSettings, load_imap_settings, outlook_auth_mode, use_graph_for_outlook
 from schemas import ActionItem, EmailAnalysis
 from triage import EmailMessage
 
@@ -105,6 +105,35 @@ def test_load_imap_settings_rejects_invalid_search_mode(
 
     with pytest.raises(ValueError, match="IMAP_SEARCH_MODE must be one of: unread, recent"):
         load_imap_settings()
+
+
+def test_outlook_auth_mode_defaults_to_imap(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OUTLOOK_AUTH_MODE", raising=False)
+
+    assert outlook_auth_mode() == "imap"
+
+
+def test_outlook_auth_mode_rejects_invalid_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OUTLOOK_AUTH_MODE", "oauth")
+
+    with pytest.raises(ValueError, match="OUTLOOK_AUTH_MODE must be one of: imap, graph"):
+        outlook_auth_mode()
+
+
+def test_use_graph_for_outlook_requires_outlook_and_graph(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("EMAIL_PROVIDER", "outlook")
+    monkeypatch.setenv("OUTLOOK_AUTH_MODE", "graph")
+
+    assert use_graph_for_outlook() is True
+
+    monkeypatch.setenv("OUTLOOK_AUTH_MODE", "imap")
+    assert use_graph_for_outlook() is False
+
+    monkeypatch.setenv("EMAIL_PROVIDER", "gmail")
+    monkeypatch.setenv("OUTLOOK_AUTH_MODE", "graph")
+    assert use_graph_for_outlook() is False
 
 
 def test_explicit_imap_host_overrides_provider_default(monkeypatch: pytest.MonkeyPatch) -> None:

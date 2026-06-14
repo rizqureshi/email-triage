@@ -86,6 +86,7 @@ def test_run_inbox_review_fetches_saves_and_builds_report(monkeypatch) -> None:
 
     list_cards_mock = Mock(side_effect=list_cards_side_effect)
     fetch_unread_mock = Mock()
+    monkeypatch.setattr(review, "use_graph_for_outlook", Mock(return_value=False))
     monkeypatch.setattr(review, "load_imap_settings", Mock(return_value=make_settings()))
     monkeypatch.setattr(review.fetch_imap, "fetch_inbox_summary_cards", fetch_mock)
     monkeypatch.setattr(review.fetch_imap, "fetch_unread_emails", fetch_unread_mock)
@@ -120,6 +121,7 @@ def test_run_inbox_review_fetches_saves_and_builds_report(monkeypatch) -> None:
 
 def test_run_inbox_review_defaults_blank_mailbox_to_inbox(monkeypatch) -> None:
     fetch_mock = Mock(return_value=[])
+    monkeypatch.setattr(review, "use_graph_for_outlook", Mock(return_value=False))
     monkeypatch.setattr(review, "load_imap_settings", Mock(return_value=make_settings()))
     monkeypatch.setattr(review.fetch_imap, "fetch_inbox_summary_cards", fetch_mock)
     monkeypatch.setattr(review.storage, "save_summary_cards", Mock())
@@ -132,6 +134,36 @@ def test_run_inbox_review_defaults_blank_mailbox_to_inbox(monkeypatch) -> None:
     settings = fetch_mock.call_args.args[0]
     assert settings.mailbox == "INBOX"
     assert settings.search_mode == "unread"
+
+
+def test_run_inbox_review_graph_mode_uses_graph_fetch(monkeypatch) -> None:
+    graph_cards = [make_card()]
+    graph_mock = Mock(return_value=graph_cards)
+    imap_mock = Mock()
+    settings_mock = Mock()
+    monkeypatch.setattr(review, "use_graph_for_outlook", Mock(return_value=True))
+    monkeypatch.setattr(review.fetch_graph, "fetch_graph_summary_cards", graph_mock)
+    monkeypatch.setattr(review.fetch_imap, "fetch_inbox_summary_cards", imap_mock)
+    monkeypatch.setattr(review, "load_imap_settings", settings_mock)
+    monkeypatch.setattr(review.storage, "save_summary_cards", Mock())
+    monkeypatch.setattr(review.daily_briefing, "generate_daily_briefing", Mock(return_value={}))
+    monkeypatch.setattr(review.storage, "list_action_items", Mock(return_value=[]))
+    monkeypatch.setattr(review.storage, "list_cards", Mock(return_value=[]))
+
+    result = review.run_inbox_review(
+        max_messages=4,
+        mailbox="Sent Items",
+        search_mode="recent",
+    )
+
+    graph_mock.assert_called_once_with(
+        mailbox="Sent Items",
+        max_messages=4,
+        search_mode="recent",
+    )
+    imap_mock.assert_not_called()
+    settings_mock.assert_not_called()
+    assert result["search_mode"] == "recent"
 
 
 def test_format_inbox_review_includes_counts_and_sections() -> None:

@@ -62,7 +62,21 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
   - Exposes `mailbox_presets()` and `default_mailbox()` for provider-aware
     mailbox/folder suggestions.
   - Presets include display name, IMAP host/port, SSL flag, default mailbox,
-    setup notes, app-password guidance, and whether OAuth may be needed later.
+    setup notes, app-password guidance, and whether OAuth may be needed.
+
+- `graph_auth.py`
+  - Loads Microsoft Graph OAuth settings.
+  - Uses MSAL public-client device-code flow.
+  - Stores the MSAL token cache in `.msal_token_cache.json`, which must remain
+    ignored by Git.
+  - Never prints raw access tokens, refresh tokens, or app secrets.
+
+- `fetch_graph.py`
+  - Read-only Microsoft Graph mail ingestion for Outlook Graph mode.
+  - Uses delegated `Mail.Read` access with `GET /me/mailFolders/{id}/messages`.
+  - Does not call Graph send, move, copy, patch, delete, or mark-as-read APIs.
+  - Converts Graph messages into existing `EmailMessage` and summary-card
+    shapes.
 
 - `schemas.py`
   - Defines shared dataclasses such as `ActionItem` and `EmailAnalysis`.
@@ -297,9 +311,9 @@ omitted and the preset defaults are used. Explicit `.env` values still override
 the preset. For `EMAIL_PROVIDER=custom`, `IMAP_HOST` is required.
 
 Provider presets are IMAP-only. Gmail API OAuth and Microsoft Graph OAuth are
-deferred intentionally so this step can preserve the existing read-only IMAP
-behavior. Future OAuth work should be introduced as a separate provider/auth
-layer with explicit tests and safety review.
+separate from provider presets. Outlook can use Microsoft Graph when
+`EMAIL_PROVIDER=outlook` and `OUTLOOK_AUTH_MODE=graph`; otherwise Outlook keeps
+the existing IMAP path.
 
 Provider-specific authentication help lives in `email_providers.py`. `doctor.py`,
 `fetch_imap.py`, and the Streamlit GUI use that helper so iCloud, Gmail,
@@ -324,6 +338,10 @@ IMAP `UNSEEN`; `recent` maps to IMAP `ALL` and then `_recent_message_ids()`
 limits the result to the most recent `max_messages` IDs. Both modes still use
 `readonly=True` mailbox selection and `BODY.PEEK[]` fetches.
 
+Microsoft Graph search mode follows the same user-facing values. `unread` sends
+`$filter=isRead eq false`; `recent` omits the unread filter. Both use `$top` and
+Graph `GET` requests only.
+
 ## Safety Constraints
 
 For future development:
@@ -336,12 +354,13 @@ For future development:
 - Do not mark emails as read.
 - Do not store raw email bodies.
 - Do not print secrets such as IMAP passwords or OpenAI API keys.
-- Provider presets must remain IMAP read-only presets. Do not add Gmail API
-  OAuth or Microsoft Graph OAuth in this layer.
+- Provider presets must remain IMAP read-only presets. Keep Microsoft Graph in
+  `graph_auth.py` and `fetch_graph.py`; do not add Gmail API OAuth or new Graph
+  write scopes without explicit approval.
 - Do not add SMTP for any provider preset.
-- `review.py` and `email_assistant.py review` must use the existing read-only
-  fetch behavior in `fetch_imap.py`. They must not send, delete, archive, move,
-  or mark emails as read.
+- `review.py` and `email_assistant.py review` must use existing read-only fetch
+  behavior in `fetch_imap.py` or `fetch_graph.py`. They must not send, delete,
+  archive, move, or mark emails as read.
 - `doctor.py` must never fetch, select, search, modify, copy, delete, move, or
   mark email. Its IMAP check may only connect over SSL, login, and logout.
 - `email_assistant.py list` must read only from SQLite storage. It must not call

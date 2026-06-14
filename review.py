@@ -5,9 +5,10 @@ from __future__ import annotations
 from dataclasses import replace
 
 import daily_briefing
+import fetch_graph
 import fetch_imap
 import storage
-from config import SEARCH_MODE_UNREAD, load_imap_settings, search_mode_label
+from config import SEARCH_MODE_UNREAD, load_imap_settings, search_mode_label, use_graph_for_outlook
 
 
 SAFETY_NOTE = (
@@ -21,15 +22,24 @@ def run_inbox_review(
     mailbox: str = "INBOX",
     search_mode: str = SEARCH_MODE_UNREAD,
 ) -> dict[str, object]:
-    settings = load_imap_settings()
-    settings = replace(
-        settings,
-        max_messages=max_messages,
-        mailbox=mailbox.strip() or "INBOX",
-        search_mode=search_mode,
-    )
-
-    cards = fetch_imap.fetch_inbox_summary_cards(settings)
+    selected_mailbox = mailbox.strip() or "INBOX"
+    if use_graph_for_outlook():
+        cards = fetch_graph.fetch_graph_summary_cards(
+            mailbox=selected_mailbox,
+            max_messages=max_messages,
+            search_mode=search_mode,
+        )
+        selected_search_mode = search_mode
+    else:
+        settings = load_imap_settings()
+        settings = replace(
+            settings,
+            max_messages=max_messages,
+            mailbox=selected_mailbox,
+            search_mode=search_mode,
+        )
+        cards = fetch_imap.fetch_inbox_summary_cards(settings)
+        selected_search_mode = settings.search_mode
     storage.save_summary_cards(cards)
     briefing = daily_briefing.generate_daily_briefing()
     action_items = storage.list_action_items()
@@ -45,7 +55,7 @@ def run_inbox_review(
         "urgent_emails": urgent_emails,
         "high_priority_emails": high_priority_emails,
         "response_needed_emails": response_needed_emails,
-        "search_mode": settings.search_mode,
+        "search_mode": selected_search_mode,
         "safety_note": SAFETY_NOTE,
     }
 

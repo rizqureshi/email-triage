@@ -158,6 +158,50 @@ def test_fetch_search_mode_recent_is_passed(monkeypatch, capsys) -> None:
     assert fetch_mock.call_args.args[0].search_mode == "recent"
 
 
+def test_fetch_outlook_graph_mode_calls_graph_path(monkeypatch, capsys) -> None:
+    graph_mock = Mock(return_value=[make_card()])
+    imap_mock = Mock()
+    settings_mock = Mock()
+    monkeypatch.setattr(email_assistant, "use_graph_for_outlook", Mock(return_value=True))
+    monkeypatch.setattr(email_assistant, "load_default_mailbox", Mock(return_value="INBOX"))
+    monkeypatch.setattr(email_assistant, "load_default_max_messages", Mock(return_value=5))
+    monkeypatch.setattr(email_assistant, "load_search_mode", Mock(return_value="unread"))
+    monkeypatch.setattr(email_assistant.fetch_graph, "fetch_graph_summary_cards", graph_mock)
+    monkeypatch.setattr(email_assistant.fetch_imap, "fetch_inbox_summary_cards", imap_mock)
+    monkeypatch.setattr(email_assistant, "load_imap_settings", settings_mock)
+
+    exit_code = email_assistant.main(
+        ["fetch", "--mailbox", "Sent Items", "--search-mode", "recent", "--max-messages", "4"]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Invoice question" in captured.out
+    graph_mock.assert_called_once_with(
+        mailbox="Sent Items",
+        max_messages=4,
+        search_mode="recent",
+    )
+    imap_mock.assert_not_called()
+    settings_mock.assert_not_called()
+
+
+def test_fetch_outlook_imap_mode_keeps_imap_path(monkeypatch, capsys) -> None:
+    graph_mock = Mock()
+    imap_mock = Mock(return_value=[])
+    monkeypatch.setattr(email_assistant, "use_graph_for_outlook", Mock(return_value=False))
+    monkeypatch.setattr(email_assistant, "load_imap_settings", Mock(return_value=make_settings()))
+    monkeypatch.setattr(email_assistant.fetch_graph, "fetch_graph_summary_cards", graph_mock)
+    monkeypatch.setattr(email_assistant.fetch_imap, "fetch_inbox_summary_cards", imap_mock)
+
+    exit_code = email_assistant.main(["fetch"])
+    capsys.readouterr()
+
+    assert exit_code == 0
+    imap_mock.assert_called_once()
+    graph_mock.assert_not_called()
+
+
 def test_fetch_json_prints_valid_json(monkeypatch, capsys) -> None:
     monkeypatch.setattr(email_assistant, "load_imap_settings", Mock(return_value=make_settings()))
     monkeypatch.setattr(
@@ -431,6 +475,19 @@ def test_review_search_mode_recent_is_passed(monkeypatch, capsys) -> None:
 
     assert exit_code == 0
     review_mock.assert_called_once_with(max_messages=10, mailbox="INBOX", search_mode="recent")
+
+
+def test_graph_login_calls_token_acquisition(monkeypatch, capsys) -> None:
+    token_mock = Mock(return_value="secret-token")
+    monkeypatch.setattr(email_assistant.graph_auth, "get_graph_access_token", token_mock)
+
+    exit_code = email_assistant.main(["graph-login"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Microsoft Graph login succeeded" in captured.out
+    assert "secret-token" not in captured.out
+    token_mock.assert_called_once_with()
 
 
 def test_fetch_invalid_search_mode_is_rejected(capsys) -> None:

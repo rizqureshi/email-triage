@@ -217,6 +217,24 @@ def test_mailbox_inputs_do_not_connect_to_imap(monkeypatch) -> None:
     text_input.assert_called_once()
 
 
+def test_render_outlook_auth_mode_graph_shows_client_id_warning(monkeypatch) -> None:
+    caption = Mock()
+    warning = Mock()
+    info = Mock()
+    monkeypatch.setenv("EMAIL_PROVIDER", "outlook")
+    monkeypatch.setenv("OUTLOOK_AUTH_MODE", "graph")
+    monkeypatch.delenv("MS_GRAPH_CLIENT_ID", raising=False)
+    monkeypatch.setattr(app.st, "caption", caption)
+    monkeypatch.setattr(app.st, "warning", warning)
+    monkeypatch.setattr(app.st, "info", info)
+
+    app._render_outlook_auth_mode()
+
+    caption.assert_called_once_with("Outlook auth mode: graph")
+    warning.assert_called_once()
+    info.assert_called_once()
+
+
 def test_search_mode_value_maps_unread_label() -> None:
     assert app._search_mode_value("Unread only") == "unread"
 
@@ -236,6 +254,7 @@ def test_search_mode_input_returns_recent_value(monkeypatch) -> None:
 def test_fetch_email_cards_passes_search_mode_to_settings(monkeypatch) -> None:
     fetch_mock = Mock(return_value=[])
     save_mock = Mock()
+    monkeypatch.setattr(app, "use_graph_for_outlook", Mock(return_value=False))
     monkeypatch.setattr(app, "load_imap_settings", Mock(return_value=make_settings()))
     monkeypatch.setattr(app.fetch_imap, "fetch_inbox_summary_cards", fetch_mock)
     monkeypatch.setattr(app.storage, "save_summary_cards", save_mock)
@@ -248,6 +267,27 @@ def test_fetch_email_cards_passes_search_mode_to_settings(monkeypatch) -> None:
     assert settings.search_mode == "recent"
     assert result == {"cards": [], "search_mode": "recent"}
     save_mock.assert_called_once_with([])
+
+
+def test_fetch_email_cards_graph_mode_uses_graph(monkeypatch) -> None:
+    graph_mock = Mock(return_value=[])
+    imap_mock = Mock()
+    settings_mock = Mock()
+    monkeypatch.setattr(app, "use_graph_for_outlook", Mock(return_value=True))
+    monkeypatch.setattr(app.fetch_graph, "fetch_graph_summary_cards", graph_mock)
+    monkeypatch.setattr(app.fetch_imap, "fetch_inbox_summary_cards", imap_mock)
+    monkeypatch.setattr(app, "load_imap_settings", settings_mock)
+
+    result = app._fetch_email_cards(7, "Sent Items", "recent", save_cards=False)
+
+    assert result == {"cards": [], "search_mode": "recent"}
+    graph_mock.assert_called_once_with(
+        mailbox="Sent Items",
+        max_messages=7,
+        search_mode="recent",
+    )
+    imap_mock.assert_not_called()
+    settings_mock.assert_not_called()
 
 
 def test_run_inbox_review_passes_search_mode(monkeypatch) -> None:
