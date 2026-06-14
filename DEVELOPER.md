@@ -161,6 +161,8 @@ Raw email bodies are used for immediate analysis but are not stored in SQLite.
   - Builds the setup-check report for `python email_assistant.py doctor`.
   - Checks `.env`, OpenAI configuration, provider preset resolution, IMAP
     settings, optional IMAP login, and database/card count.
+  - In Outlook Graph mode, checks Graph configuration and token-cache presence
+    instead of requiring IMAP credentials or starting device-code login.
   - Reports selected provider key, display name, resolved host/port, username,
     mailbox, and setup notes.
   - Must not print secrets such as `OPENAI_API_KEY` or `IMAP_PASSWORD`.
@@ -363,6 +365,7 @@ For future development:
   archive, move, or mark emails as read.
 - `doctor.py` must never fetch, select, search, modify, copy, delete, move, or
   mark email. Its IMAP check may only connect over SSL, login, and logout.
+  Graph diagnostics must not start device-code login automatically.
 - `email_assistant.py list` must read only from SQLite storage. It must not call
   IMAP or any mailbox-modifying code.
 - `email_assistant.py actions` and the GUI Action Items tab must read only from

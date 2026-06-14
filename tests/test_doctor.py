@@ -57,6 +57,10 @@ def clear_app_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "OPENAI_API_KEY",
         "OPENAI_MODEL",
         "EMAIL_PROVIDER",
+        "OUTLOOK_AUTH_MODE",
+        "MS_GRAPH_CLIENT_ID",
+        "MS_GRAPH_TENANT",
+        "MS_GRAPH_SCOPES",
         "IMAP_HOST",
         "IMAP_PORT",
         "IMAP_USERNAME",
@@ -160,6 +164,79 @@ def test_doctor_unknown_provider_error_lists_valid_keys(
     assert "Unknown EMAIL_PROVIDER 'fastmail'" in str(report["imap"]["error"])
     assert "icloud, gmail, outlook, yahoo, aol, custom" in str(report["imap"]["error"])
     assert "Unknown EMAIL_PROVIDER 'fastmail'" in output
+
+
+def test_doctor_outlook_graph_mode_does_not_require_imap_credentials(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    clear_app_env(monkeypatch)
+    monkeypatch.setenv("EMAIL_PROVIDER", "outlook")
+    monkeypatch.setenv("OUTLOOK_AUTH_MODE", "graph")
+    monkeypatch.setenv("MS_GRAPH_CLIENT_ID", "client-id")
+    monkeypatch.setenv("MS_GRAPH_TENANT", "consumers")
+    monkeypatch.setenv("MS_GRAPH_SCOPES", "User.Read Mail.Read offline_access")
+    monkeypatch.delenv("IMAP_USERNAME", raising=False)
+    monkeypatch.delenv("IMAP_PASSWORD", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    report = doctor.run_doctor()
+    output = doctor.format_doctor_report(report)
+
+    assert report["imap"]["provider_key"] == "outlook"
+    assert report["imap"]["auth_mode"] == "graph"
+    assert report["imap"]["graph_settings_loaded"] is True
+    assert report["imap"]["client_id_configured"] is True
+    assert report["imap"]["tenant"] == "consumers"
+    assert report["imap"]["scopes"] == ["User.Read", "Mail.Read", "offline_access"]
+    assert report["imap"]["token_cache_exists"] is False
+    assert report["imap"]["login_checked"] is False
+    assert report["imap"]["error"] is None
+    assert "Graph mode enabled" in output
+    assert "MS_GRAPH_CLIENT_ID configured" in output
+    assert "Token cache not found" in output
+    assert "python email_assistant.py graph-login" in output
+    assert "client-id" not in output
+
+
+def test_doctor_outlook_graph_mode_reports_token_cache_presence(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    clear_app_env(monkeypatch)
+    monkeypatch.setenv("EMAIL_PROVIDER", "outlook")
+    monkeypatch.setenv("OUTLOOK_AUTH_MODE", "graph")
+    monkeypatch.setenv("MS_GRAPH_CLIENT_ID", "client-id")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".msal_token_cache.json").write_text("secret-cache-token")
+
+    report = doctor.run_doctor()
+    output = doctor.format_doctor_report(report)
+
+    assert report["imap"]["token_cache_exists"] is True
+    assert "Token cache found" in output
+    assert "secret-cache-token" not in output
+
+
+def test_doctor_outlook_imap_mode_still_uses_imap_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    clear_app_env(monkeypatch)
+    monkeypatch.setenv("EMAIL_PROVIDER", "outlook")
+    monkeypatch.setenv("OUTLOOK_AUTH_MODE", "imap")
+    monkeypatch.setenv("IMAP_USERNAME", "user@outlook.com")
+    monkeypatch.setenv("IMAP_PASSWORD", "secret-password")
+    monkeypatch.chdir(tmp_path)
+    client = FakeImapClient()
+    monkeypatch.setattr(doctor.imaplib, "IMAP4_SSL", Mock(return_value=client))
+
+    report = doctor.run_doctor()
+
+    assert report["imap"]["settings_loaded"] is True
+    assert report["imap"].get("auth_mode") is None
+    assert report["imap"]["login_checked"] is True
+    assert client.calls == [
+        ("login", "user@outlook.com", "secret-password"),
+        ("logout",),
+    ]
 
 
 def test_skip_imap_login_does_not_attempt_connection(

@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any
 
 import storage
-from config import ImapSettings, load_imap_settings, load_settings
+import graph_auth
+from config import ImapSettings, load_imap_settings, load_settings, use_graph_for_outlook
 from email_providers import authentication_help, get_provider
 
 
@@ -66,6 +67,25 @@ def format_doctor_report(report: dict[str, object]) -> str:
     if openai.get("error"):
         lines.append(f"! OpenAI settings warning: {openai['error']}")
 
+    if imap.get("auth_mode") == "graph":
+        _append_graph_report(lines, imap)
+    else:
+        _append_imap_report(lines, imap)
+
+    lines.extend(["", "Database:"])
+    if database.get("exists"):
+        lines.append("✓ Database exists")
+        lines.append(f"✓ Stored summary cards: {database.get('stored_summary_cards', 0)}")
+    else:
+        lines.append("! Database does not exist yet")
+        lines.append("  This is normal before your first fetch with --save.")
+        lines.append("✓ Stored summary cards: 0")
+
+    lines.extend(["", "Safety:", f"✓ {report.get('safety_note') or SAFETY_NOTE}"])
+    return "\n".join(lines)
+
+
+def _append_imap_report(lines: list[str], imap: dict[str, object]) -> None:
     lines.extend(["", "IMAP:"])
     if imap.get("settings_loaded"):
         lines.append("✓ IMAP settings loaded")
@@ -92,17 +112,27 @@ def format_doctor_report(report: dict[str, object]) -> str:
         if imap.get("error") and imap.get("settings_loaded"):
             lines.append(f"  Reason: {imap['error']}")
 
-    lines.extend(["", "Database:"])
-    if database.get("exists"):
-        lines.append("✓ Database exists")
-        lines.append(f"✓ Stored summary cards: {database.get('stored_summary_cards', 0)}")
-    else:
-        lines.append("! Database does not exist yet")
-        lines.append("  This is normal before your first fetch with --save.")
-        lines.append("✓ Stored summary cards: 0")
 
-    lines.extend(["", "Safety:", f"✓ {report.get('safety_note') or SAFETY_NOTE}"])
-    return "\n".join(lines)
+def _append_graph_report(lines: list[str], graph: dict[str, object]) -> None:
+    lines.extend(["", "Outlook Auth:"])
+    lines.append("✓ Graph mode enabled")
+    lines.append(f"  Provider: {graph.get('provider_display_name')} ({graph.get('provider_key')})")
+    if graph.get("client_id_configured"):
+        lines.append("✓ MS_GRAPH_CLIENT_ID configured")
+    else:
+        lines.append("! MS_GRAPH_CLIENT_ID not configured")
+    if graph.get("tenant"):
+        lines.append(f"✓ Tenant: {graph.get('tenant')}")
+    scopes = graph.get("scopes", [])
+    if isinstance(scopes, list) and scopes:
+        lines.append(f"✓ Scopes: {' '.join(str(scope) for scope in scopes)}")
+    if graph.get("token_cache_exists"):
+        lines.append("✓ Token cache found")
+    else:
+        lines.append("! Token cache not found")
+        lines.append("  Suggested fix: run python email_assistant.py graph-login")
+    if graph.get("error"):
+        lines.append(f"  Suggested fix: {graph.get('error')}")
 
 
 def _check_openai() -> dict[str, object]:
@@ -123,6 +153,9 @@ def _check_openai() -> dict[str, object]:
 
 
 def _check_imap(skip_imap_login: bool) -> dict[str, object]:
+    if use_graph_for_outlook():
+        return _check_outlook_graph()
+
     imap_report: dict[str, object] = {
         "settings_loaded": False,
         "provider_key": None,
@@ -173,6 +206,39 @@ def _check_imap(skip_imap_login: bool) -> dict[str, object]:
 
     imap_report["login_successful"] = True
     return imap_report
+
+
+def _check_outlook_graph() -> dict[str, object]:
+    graph_report: dict[str, object] = {
+        "settings_loaded": True,
+        "provider_key": "outlook",
+        "provider_display_name": "Outlook / Microsoft 365",
+        "auth_mode": "graph",
+        "graph_settings_loaded": False,
+        "client_id_configured": False,
+        "tenant": None,
+        "scopes": [],
+        "token_cache_exists": False,
+        "login_checked": False,
+        "login_successful": False,
+        "error": None,
+    }
+    try:
+        settings = graph_auth.load_graph_settings()
+    except ValueError as exc:
+        graph_report["error"] = _sanitize_error(exc)
+        return graph_report
+
+    graph_report.update(
+        {
+            "graph_settings_loaded": True,
+            "client_id_configured": True,
+            "tenant": settings.tenant,
+            "scopes": list(settings.scopes),
+            "token_cache_exists": Path(settings.token_cache_path).exists(),
+        }
+    )
+    return graph_report
 
 
 def _check_imap_login(settings: ImapSettings) -> None:

@@ -127,6 +127,13 @@ python email_assistant.py graph-login
 Graph mode uses delegated Microsoft OAuth and read-only `Mail.Read`. It does
 not send or modify email.
 
+In Graph mode, `doctor` checks Graph configuration and token-cache presence
+instead of requiring IMAP credentials. First-time login remains:
+
+```bash
+python email_assistant.py graph-login
+```
+
 Example custom IMAP setup:
 
 ```bash

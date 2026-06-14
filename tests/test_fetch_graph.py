@@ -51,7 +51,11 @@ def test_graph_folder_id_for_unknown_mailbox_is_friendly() -> None:
 
 
 def test_graph_query_params_unread_mode() -> None:
-    params = fetch_graph._graph_query_params(max_messages=7, search_mode="unread")
+    params = fetch_graph._graph_query_params(
+        max_messages=7,
+        search_mode="unread",
+        folder_id="inbox",
+    )
 
     assert params["$top"] == 7
     assert params["$filter"] == "isRead eq false"
@@ -60,10 +64,34 @@ def test_graph_query_params_unread_mode() -> None:
 
 
 def test_graph_query_params_recent_mode_has_no_unread_filter() -> None:
-    params = fetch_graph._graph_query_params(max_messages=5, search_mode="recent")
+    params = fetch_graph._graph_query_params(
+        max_messages=5,
+        search_mode="recent",
+        folder_id="inbox",
+    )
 
     assert params["$top"] == 5
     assert "$filter" not in params
+
+
+def test_graph_query_params_sent_items_uses_sent_datetime_order() -> None:
+    params = fetch_graph._graph_query_params(
+        max_messages=5,
+        search_mode="recent",
+        folder_id="sentitems",
+    )
+
+    assert params["$orderby"] == "sentDateTime desc"
+
+
+def test_graph_query_params_inbox_uses_received_datetime_order() -> None:
+    params = fetch_graph._graph_query_params(
+        max_messages=5,
+        search_mode="recent",
+        folder_id="inbox",
+    )
+
+    assert params["$orderby"] == "receivedDateTime desc"
 
 
 def test_fetch_graph_messages_builds_inbox_url_and_unread_filter(monkeypatch) -> None:
@@ -106,6 +134,7 @@ def test_fetch_graph_messages_recent_sent_items(monkeypatch) -> None:
     assert messages == []
     assert get_mock.call_args.args[0].endswith("/me/mailFolders/sentitems/messages")
     assert "$filter" not in get_mock.call_args.kwargs["params"]
+    assert get_mock.call_args.kwargs["params"]["$orderby"] == "sentDateTime desc"
 
 
 def test_graph_message_uses_limited_body_when_preview_missing() -> None:

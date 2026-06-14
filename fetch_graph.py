@@ -36,7 +36,11 @@ def fetch_graph_messages(
     token = graph_auth.get_graph_access_token()
     folder_id = graph_folder_id_for_mailbox(mailbox)
     url = _messages_url(folder_id)
-    params = _graph_query_params(max_messages=max_messages, search_mode=search_mode)
+    params = _graph_query_params(
+        max_messages=max_messages,
+        search_mode=search_mode,
+        folder_id=folder_id,
+    )
     headers = {"Authorization": f"Bearer {token}"}
 
     try:
@@ -94,17 +98,27 @@ def _messages_url(folder_id: str) -> str:
     return f"{GRAPH_BASE_URL}/me/mailFolders/{folder_id}/messages"
 
 
-def _graph_query_params(max_messages: int, search_mode: str) -> dict[str, object]:
+def _graph_query_params(
+    max_messages: int,
+    search_mode: str,
+    folder_id: str = "inbox",
+) -> dict[str, object]:
     params: dict[str, object] = {
         "$top": max_messages,
         "$select": ",".join(GRAPH_SELECT_FIELDS),
-        "$orderby": "receivedDateTime desc",
+        "$orderby": _graph_orderby_for_folder(folder_id),
     }
     if search_mode == SEARCH_MODE_UNREAD:
         params["$filter"] = "isRead eq false"
     elif search_mode != SEARCH_MODE_RECENT:
         params["$filter"] = "isRead eq false"
     return params
+
+
+def _graph_orderby_for_folder(folder_id: str) -> str:
+    if folder_id == "sentitems":
+        return "sentDateTime desc"
+    return "receivedDateTime desc"
 
 
 def _graph_message_to_email(message: dict[str, Any]) -> tuple[str, EmailMessage]:
